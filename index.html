@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="preconnect" href="https://www.highrevenueformat.com" crossorigin>
+<link rel="preconnect" href="https://pl32166346.profitableratecpmnetwork.com" crossorigin>
+<link rel="preconnect" href="https://pl32166347.profitableratecpmnetwork.com" crossorigin>
+<link rel="preconnect" href="https://acscdn.com" crossorigin>
+<link rel="preconnect" href="https://5gvci.com" crossorigin>
+<link rel="preconnect" href="https://nap5k.com" crossorigin>
+<link rel="dns-prefetch" href="//www.highrevenueformat.com">
+<link rel="dns-prefetch" href="//acscdn.com">
+<link rel="dns-prefetch" href="//5gvci.com">
 <script id="aclib" type="text/javascript" src="//acscdn.com/script/aclib.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -2588,6 +2597,7 @@ function renderBannerSlot(el, cfg){
   const f = document.createElement('iframe');
   f.width = cfg.w; f.height = cfg.h;
   f.setAttribute('scrolling','no'); f.setAttribute('frameborder','0');
+  f.setAttribute('loading','eager');
   f.style.cssText = 'border:0;display:block;margin:0 auto;max-width:100%';
   f.srcdoc = html;
   el.appendChild(f);
@@ -2611,6 +2621,17 @@ function buildAd(el){
 function observeAds(){
   const els = $$('[data-ad]');
   if(!('IntersectionObserver' in window)){ els.forEach(buildAd); return; }
+
+  /* above-the-fold slots load right away so they appear fast */
+  const vh = window.innerHeight || 800;
+  els.forEach(function(el){
+    if(el.dataset.done || el.dataset.watched) return;
+    const r = el.getBoundingClientRect();
+    if(r.top < vh + 80 && r.bottom > -80){
+      el.dataset.watched = '1';
+      buildAd(el);
+    }
+  });
   if(!adObserver){
     adObserver = new IntersectionObserver(function(list){
       list.forEach(function(entry){
