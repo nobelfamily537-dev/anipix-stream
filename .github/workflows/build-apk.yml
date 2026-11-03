@@ -37,9 +37,9 @@ jobs:
         working-directory: app
         run: flutter pub get
 
-      - name: Build release APKs (split per ABI)
+      - name: Build release APK (universal)
         working-directory: app
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release
 
       - name: Show sizes
         run: ls -lh app/build/app/outputs/flutter-apk/ || true
