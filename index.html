@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script id="aclib" type="text/javascript" src="//acscdn.com/script/aclib.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#08080b">
@@ -2595,6 +2596,27 @@ function mountAds(){
     sb.async = true;
     sb.src = 'https://pl32166347.profitableratecpmnetwork.com/54/9f/6c/549f6c9b1176fbe00992321c0e3d1281.js';
     document.body.appendChild(sb);
+  }
+
+  mountAdcash();
+}
+
+/* ---------- Adcash: video slider + interstitial (throttled) ---------- */
+const ADCASH = { sliderAt: 0, interAt: 0 };
+function mountAdcash(){
+  if(typeof aclib === 'undefined') return;
+  const now = Date.now();
+
+  // video slider: at most once every 5 minutes
+  if(now - ADCASH.sliderAt > 5 * 60 * 1000){
+    ADCASH.sliderAt = now;
+    try{ aclib.runVideoSlider({ zoneId: '12400310' }); }catch(e){}
+  }
+
+  // interstitial: at most once every 4 minutes, delayed so it does not block render
+  if(now - ADCASH.interAt > 4 * 60 * 1000){
+    ADCASH.interAt = now;
+    setTimeout(()=>{ try{ aclib.runInterstitial({ zoneId: '12400314' }); }catch(e){} }, 2200);
   }
 }
 
