@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -301,6 +302,10 @@ class PlaylistScreen extends StatefulWidget {
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
   int? _season;
+  String? _lang;
+  int _tab = 0;
+
+  static const Color kTeal = Color(0xFF22C55E);
 
   @override
   Widget build(BuildContext context) {
@@ -309,110 +314,251 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     if (playlist == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const EmptyState(icon: Icons.error_outline, title: 'Not found', message: 'This playlist is no longer available.'),
+        body: const EmptyState(
+          icon: Icons.error_outline,
+          title: 'Not found',
+          message: 'This playlist is no longer available.',
+        ),
       );
     }
+
     final eps = lib!.episodesOf(playlist.id);
     final seasons = <int>{for (final e in eps) e.season}.toList()..sort();
-    final active = _season ?? (seasons.isNotEmpty ? seasons.first : 1);
-    final shown = eps.where((e) => e.season == active).toList();
+    final active = _season ?? (seasons.isEmpty ? 1 : seasons.first);
+    final seasonEps = eps.where((e) => e.season == active).toList();
+    final lang = _lang ?? (playlist.audio.isNotEmpty ? playlist.audio.first : 'Original');
+    final others = lib.playlists.where((x) => x.id != playlist.id).toList();
+    final inList = Store.i.inWatchlist(playlist.id);
 
     return Scaffold(
+      backgroundColor: kBg,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            pinned: true,
-            expandedHeight: (MediaQuery.sizeOf(context).height * 0.34).clamp(200.0, 320.0),
-            backgroundColor: kBg,
-            flexibleSpace: FlexibleSpaceBar(
-              background: AppImage(
-                src: playlist.banner.isNotEmpty ? playlist.banner : playlist.thumb,
-                cacheWidth: 900,
-                fallback: Container(color: kSurface2),
-              ),
+          /* ---------- banner ---------- */
+          SliverToBoxAdapter(
+            child: Stack(
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: AppImage(
+                    src: playlist.banner.isNotEmpty ? playlist.banner : playlist.thumb,
+                    cacheWidth: 900,
+                    fallback: Container(color: kSurface2),
+                  ),
+                ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black.withOpacity(0.35), kBg],
+                      ),
+                    ),
+                  ),
+                ),
+                SafeArea(
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ],
             ),
           ),
+
+          /* ---------- title + meta ---------- */
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(playlist.title,
-                      style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800, height: 1.2)),
-                  const SizedBox(height: 8),
                   Text(
-                    [
-                      if (playlist.rating > 0) '★ ${playlist.rating.toStringAsFixed(1)}',
-                      playlist.dubLabel,
-                      if (playlist.year > 0) '${playlist.year}',
-                      if (playlist.audio.isNotEmpty) playlist.audio.join(' · '),
-                    ].join('  ·  '),
-                    style: const TextStyle(fontSize: 11.5, color: kMuted, fontWeight: FontWeight.w600),
+                    '${playlist.title} [${lang}]',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.2),
                   ),
-                  if (playlist.desc.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(playlist.desc, style: const TextStyle(fontSize: 12.5, color: Color(0xFFB9B9C7), height: 1.55)),
-                  ],
-                  const SizedBox(height: 18),
-                  if (seasons.length > 1)
-                    SizedBox(
-                      height: 34,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: seasons.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (context, i) {
-                          final s = seasons[i];
-                          final on = s == active;
-                          return GestureDetector(
-                            onTap: () => setState(() => _season = s),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: on ? kBrand : kSurface2,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: on ? kBrand : kLine),
-                              ),
-                              child: Text('Season $s',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: on ? Colors.white : kMuted)),
-                            ),
-                          );
-                        },
+                  const SizedBox(height: 7),
+                  Row(
+                    children: [
+                      const Icon(Icons.star, size: 13, color: Color(0xFFF5C518)),
+                      const SizedBox(width: 4),
+                      Text(playlist.rating.toStringAsFixed(1),
+                          style: const TextStyle(fontSize: 11.5, color: kMuted, fontWeight: FontWeight.w700)),
+                      const SizedBox(width: 10),
+                      Text(
+                        [
+                          if (playlist.year > 0) '${playlist.year}',
+                          'Anime',
+                          if (seasons.length > 1) '${seasons.length} seasons',
+                        ].join(' · '),
+                        style: const TextStyle(fontSize: 11.5, color: kMuted),
                       ),
-                    ),
+                    ],
+                  ),
                   const SizedBox(height: 14),
-                  Text('Season $active · ${shown.length} episode${shown.length == 1 ? '' : 's'}',
-                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
+
+                  /* ---------- action chips ---------- */
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _ActionChip(
+                          icon: inList ? Icons.check : Icons.add,
+                          label: inList ? 'In list' : 'Add to list',
+                          onTap: () async {
+                            await Store.i.toggleWatchlist(playlist.id);
+                            setState(() {});
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _ActionChip(
+                          icon: Icons.share_outlined,
+                          label: 'Share',
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: '$kBaseUrl/#/detail/${playlist.id}'));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 2)),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _ActionChip(
+                          icon: Icons.download_outlined,
+                          label: 'Download',
+                          onTap: () => _openDownloads(context, playlist, eps),
+                        ),
+                        const SizedBox(width: 8),
+                        _ActionChip(
+                          icon: Icons.video_library_outlined,
+                          label: 'View downloads',
+                          onTap: () => _openDownloads(context, playlist, eps),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+
+                  /* ---------- resources ---------- */
+                  const Text('Resources',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  const Text('Uploaded by AniPix',
+                      style: TextStyle(fontSize: 11, color: kMuted)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _DropChip(
+                        label: playlist.audio.length > 1 ? lang : '$lang dub',
+                        onTap: () => _pickLang(context, playlist, lang),
+                      ),
+                      const SizedBox(width: 10),
+                      _DropChip(
+                        label: 'Season ${active.toString().padLeft(2, '0')}',
+                        onTap: () => _pickSeason(context, seasons, active),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                 ],
               ),
             ),
           ),
-          if (shown.isEmpty)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('No episodes in this season yet.',
-                    style: TextStyle(color: kMuted, fontSize: 12.5)),
+
+          /* ---------- episode chips ---------- */
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 52,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: seasonEps.length + 1,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, i) {
+                  final isAll = i == 0;
+                  final ep = isAll ? null : seasonEps[i - 1];
+                  return GestureDetector(
+                    onTap: () {
+                      if (ep == null) return;
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => PlayerScreen(
+                          playlist: playlist,
+                          episodes: eps,
+                          index: eps.indexOf(ep),
+                        ),
+                      ));
+                    },
+                    child: Container(
+                      width: isAll ? 62 : 76,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: kSurface2,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: kLine),
+                      ),
+                      child: Text(
+                        isAll ? 'All' : ep!.n.toString().padLeft(2, '0'),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kText),
+                      ),
+                    ),
+                  );
+                },
               ),
+            ),
+          ),
+
+          /* ---------- tabs ---------- */
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+              child: Row(
+                children: [
+                  _Tab(label: 'For you', on: _tab == 0, onTap: () => setState(() => _tab = 0)),
+                  const SizedBox(width: 22),
+                  _Tab(label: 'Episodes', on: _tab == 1, onTap: () => setState(() => _tab = 1)),
+                ],
+              ),
+            ),
+          ),
+
+          if (_tab == 0)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 30),
+              sliver: others.isEmpty
+                  ? const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 30),
+                        child: Text('More anime will appear here.',
+                            style: TextStyle(fontSize: 12.5, color: kMuted)),
+                      ),
+                    )
+                  : SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 14,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 0.48,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) => PosterCard(
+                          playlist: others[i],
+                          width: double.infinity,
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => PlaylistScreen(playlistId: others[i].id),
+                          )),
+                        ),
+                        childCount: others.length,
+                      ),
+                    ),
             )
           else
             SliverList.builder(
-              itemCount: shown.length,
+              itemCount: seasonEps.length,
               itemBuilder: (context, i) {
-                final e = shown[i];
+                final e = seasonEps[i];
                 return ListTile(
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => PlayerScreen(
-                      playlist: playlist,
-                      episodes: eps,
-                      index: eps.indexOf(e),
-                    ),
+                    builder: (_) => PlayerScreen(playlist: playlist, episodes: eps, index: eps.indexOf(e)),
                   )),
                   leading: Container(
                     width: 34,
@@ -435,7 +581,251 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 );
               },
             ),
-          const SliverToBoxAdapter(child: SizedBox(height: 30)),
+        ],
+      ),
+    );
+  }
+
+  void _pickSeason(BuildContext context, List<int> seasons, int active) {
+    if (seasons.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kSurface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${seasons.length} seasons',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final s in seasons)
+                    GestureDetector(
+                      onTap: () {
+                        setState(() => _season = s);
+                        Navigator.of(context).pop();
+                      },
+                      child: Container(
+                        width: 150,
+                        height: 46,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: s == active ? kBrand : kSurface2,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(color: s == active ? kBrand : kLine),
+                        ),
+                        child: Text('Season ${s.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: s == active ? Colors.white : kText)),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _pickLang(BuildContext context, Playlist playlist, String active) {
+    final langs = playlist.audio.isEmpty ? ['Original'] : playlist.audio;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kSurface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select language',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final l in langs)
+                    GestureDetector(
+                      onTap: () {
+                        setState(() => _lang = l);
+                        Navigator.of(context).pop();
+                      },
+                      child: Container(
+                        width: 150,
+                        height: 46,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: l == active ? kBrand : kSurface2,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(color: l == active ? kBrand : kLine),
+                        ),
+                        child: Text('$l dub',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: l == active ? Colors.white : kText)),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openDownloads(BuildContext context, Playlist playlist, List<Episode> eps) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kSurface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (context) {
+        final withDownloads = eps.where((e) => e.downloads.isNotEmpty).toList();
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Download', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 12),
+                if (withDownloads.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Text('Downloads will be available in a future update.',
+                        style: TextStyle(fontSize: 12.5, color: kMuted)),
+                  )
+                else
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final e in withDownloads)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('S${e.season} E${e.n}',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                            subtitle: Text(
+                              e.downloads.map((d) => d.q).join(' · '),
+                              style: const TextStyle(fontSize: 11, color: kMuted),
+                            ),
+                            trailing: const Icon(Icons.download, size: 18, color: kBrand),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _ActionChip({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 13),
+        decoration: BoxDecoration(
+          color: kSurface2,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: kLine),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 15, color: kText),
+            const SizedBox(width: 7),
+            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DropChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _DropChip({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: kSurface2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: kLine),
+        ),
+        child: Row(
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 6),
+            const Icon(Icons.keyboard_arrow_down, size: 16, color: kMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Tab extends StatelessWidget {
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+  const _Tab({required this.label, required this.on, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  color: on ? kText : kMuted)),
+          const SizedBox(height: 5),
+          Container(
+            height: 2.5,
+            width: 26,
+            decoration: BoxDecoration(
+              color: on ? kBrand : Colors.transparent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
         ],
       ),
     );
@@ -476,7 +866,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _video?.dispose();
     _video = null;
     _web = null;
-    _sourceIndex = 0;
     final src = _source;
     if (src == null) {
       if (mounted) setState(() => _busy = false);
@@ -517,7 +906,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _goTo(int i) {
     if (i < 0 || i >= widget.episodes.length) return;
-    setState(() => _index = i);
+    setState(() {
+      _index = i;
+      _sourceIndex = 0;
+    });
     Store.i.pushHistory(widget.playlist.id, _episode.season, _episode.n);
     _setup();
   }
@@ -551,6 +943,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 const SizedBox(height: 4),
                 Text('Season ${ep.season} · Episode ${ep.n}${ep.title.isNotEmpty ? ' · ${ep.title}' : ''}',
                     style: const TextStyle(fontSize: 12, color: kMuted)),
+
+                /* quick episode switcher, Moviebox style */
+                if (widget.episodes.any((x) => x.season == ep.season)) ...[
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 44,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: widget.episodes.where((x) => x.season == ep.season).length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, i) {
+                        final sameSeason =
+                            widget.episodes.where((x) => x.season == ep.season).toList();
+                        final target = sameSeason[i];
+                        final on = target.n == ep.n;
+                        return GestureDetector(
+                          onTap: () => _goTo(widget.episodes.indexOf(target)),
+                          child: Container(
+                            width: 62,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: on ? kBrand : kSurface2,
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(color: on ? kBrand : kLine),
+                            ),
+                            child: Text(
+                              target.n.toString().padLeft(2, '0'),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: on ? Colors.white : kText,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+
                 if (ep.sources.length > 1) ...[
                   const SizedBox(height: 12),
                   Wrap(
