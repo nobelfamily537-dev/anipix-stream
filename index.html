@@ -41,7 +41,7 @@ input{font:inherit}
 /* ============ header ============ */
 .hdr{position:sticky;top:0;z-index:60;height:var(--hdr);
   background:linear-gradient(180deg,rgba(8,8,11,.96),rgba(8,8,11,.82));
-  backdrop-filter:blur(18px) saturate(160%);border-bottom:1px solid var(--line)}
+  border-bottom:1px solid var(--line)}
 .hdr-in{height:100%;width:min(1440px,100% - 40px);margin-inline:auto;display:flex;align-items:center;gap:22px}
 .logo{display:flex;align-items:center;gap:9px;flex:none}
 .logo-mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(140deg,var(--brand-l),var(--brand) 45%,#b8440a);
@@ -111,8 +111,7 @@ input{font:inherit}
 .slide{position:absolute;inset:0;opacity:0;transition:opacity .8s var(--ease);pointer-events:none}
 .slide.on{opacity:1;pointer-events:auto}
 .slide-bg{position:absolute;inset:0;background-size:cover;background-position:center 30%;
-  transform:scale(1.04);animation:kb 16s ease-out both}
-@keyframes kb{from{transform:scale(1.12)}to{transform:scale(1.02)}}
+  transform:none}
 .slide-grad{position:absolute;inset:0;background:
   linear-gradient(90deg,rgba(8,8,11,.94) 0%,rgba(8,8,11,.72) 34%,rgba(8,8,11,.08) 64%,rgba(8,8,11,.42) 100%),
   linear-gradient(0deg,var(--bg) 1%,rgba(8,8,11,.35) 26%,transparent 58%),
@@ -138,7 +137,7 @@ input{font:inherit}
 .btn.primary{background:linear-gradient(180deg,var(--brand-l),var(--brand));color:#fff;
   box-shadow:0 10px 28px -10px rgba(244,117,33,.9)}
 .btn.primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
-.btn.ghost{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(8px)}
+.btn.ghost{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);}
 .btn.ghost:hover{background:rgba(255,255,255,.17)}
 .btn.dark{background:var(--s2);border:1px solid var(--line)}
 .btn.dark:hover{background:var(--s3)}
@@ -146,7 +145,7 @@ input{font:inherit}
 .hero-dots button{width:26px;height:4px;border-radius:4px;background:rgba(255,255,255,.24);transition:.3s var(--ease)}
 .hero-dots button.on{background:var(--brand);width:40px}
 .hero-nav{position:absolute;top:50%;z-index:6;width:44px;height:44px;border-radius:50%;
-  background:rgba(10,10,14,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);
+  background:rgba(10,10,14,.6);border:1px solid rgba(255,255,255,.14);
   display:grid;place-items:center;transform:translateY(-50%);transition:.2s var(--ease)}
 .hero-nav:hover{background:var(--brand);border-color:var(--brand)}
 .hero-nav svg{width:17px;height:17px;fill:#fff}
@@ -177,10 +176,10 @@ input{font:inherit}
 @media(max-width:700px){.arrow{display:none}}
 
 /* card */
-.card{width:172px;cursor:pointer;transition:transform .22s var(--ease)}
-.card:hover{transform:translateY(-5px)}
+.card{width:172px;cursor:pointer}
+@media(hover:hover){.card{transition:transform .22s var(--ease)}.card:hover{transform:translateY(-5px)}}
 .poster{position:relative;aspect-ratio:2/3;border-radius:var(--r);overflow:hidden;background:var(--s2);
-  box-shadow:0 12px 30px -18px #000}
+  box-shadow:0 6px 16px -12px #000}
 .poster img{width:100%;height:100%;object-fit:cover;transition:transform .5s var(--ease)}
 .card:hover .poster img{transform:scale(1.06)}
 .poster::after{content:"";position:absolute;inset:0;border-radius:var(--r);border:1px solid rgba(255,255,255,.07);
@@ -188,10 +187,10 @@ input{font:inherit}
 .card:hover .poster::after{border-color:rgba(244,117,33,.7);box-shadow:inset 0 -60px 50px -30px rgba(0,0,0,.85),0 0 0 1px rgba(244,117,33,.5)}
 .badges{position:absolute;top:8px;left:8px;display:flex;gap:5px;z-index:2}
 .badge{font-size:10px;font-weight:800;letter-spacing:.05em;padding:3px 7px;border-radius:5px;
-  background:rgba(8,8,11,.78);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.12)}
+  background:rgba(8,8,11,.78);border:1px solid rgba(255,255,255,.12)}
 .badge.score{color:var(--gold);border-color:rgba(255,196,77,.3)}
 .wl-btn{position:absolute;top:8px;right:8px;z-index:3;width:29px;height:29px;border-radius:50%;
-  background:rgba(8,8,11,.7);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px);
+  background:rgba(8,8,11,.7);border:1px solid rgba(255,255,255,.16);
   display:grid;place-items:center;opacity:0;transform:scale(.85);transition:.2s var(--ease)}
 .card:hover .wl-btn,.wl-btn.on{opacity:1;transform:none}
 .wl-btn svg{width:14px;height:14px;fill:#fff}
@@ -293,7 +292,7 @@ select:hover{border-color:#3c3c4e}
 .pl-row svg{width:17px;height:17px;fill:#fff}
 .pl-time{font-variant-numeric:tabular-nums;color:#dcdce6}
 .pl-badge{position:absolute;top:14px;left:14px;font-size:11px;font-weight:800;letter-spacing:.1em;
-  padding:5px 10px;border-radius:6px;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px)}
+  padding:5px 10px;border-radius:6px;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.16);}
 .wmeta{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:18px 0 0}
 .wmeta h1{font-size:21px;margin:0;letter-spacing:-.025em;font-weight:800;flex:1;min-width:200px}
 .wmeta h1 small{display:block;font-size:12.5px;color:var(--brand-l);font-weight:700;margin-top:5px;letter-spacing:.02em}
@@ -340,7 +339,7 @@ select:hover{border-color:#3c3c4e}
 .toast .dotc{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
 @keyframes tin{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
 .modal{position:fixed;inset:0;z-index:150;display:none;place-items:center;padding:20px;
-  background:rgba(4,4,7,.78);backdrop-filter:blur(6px)}
+  background:rgba(4,4,7,.78);}
 .modal.on{display:grid}
 .mbox{width:min(400px,100%);background:#12121a;border:1px solid var(--line);border-radius:18px;padding:28px;
   box-shadow:0 40px 90px -20px #000;animation:rise .3s var(--ease) both;position:relative}
@@ -449,7 +448,7 @@ select:hover{border-color:#3c3c4e}
 .src-chip{position:absolute;top:14px;right:14px;z-index:4;font-size:9.5px;font-weight:800;letter-spacing:.1em;
   padding:5px 9px;border-radius:6px;background:rgba(244,117,33,.92);color:#fff}
 .vidfail{position:absolute;inset:0 0 74px 0;z-index:5;display:grid;place-content:center;gap:8px;text-align:center;
-  padding:24px 24px 132px;background:rgba(8,8,11,.62);backdrop-filter:blur(3px);color:#ffb4b4}
+  padding:24px 24px 132px;background:rgba(8,8,11,.62);color:#ffb4b4}
 .vidfail b{font-size:15px;color:#fff;display:block}
 .vidfail span{font-size:12.5px;color:#c9c9d8;max-width:400px;line-height:1.6;display:block;
   background:rgba(8,8,11,.85);border:1px solid rgba(255,120,120,.3);border-radius:10px;padding:12px 16px}
@@ -611,11 +610,15 @@ select:hover{border-color:#3c3c4e}
 .hist small{color:var(--mut);font-size:11px;font-weight:700}
 .hist .pbar{position:static;height:3px;border-radius:3px;background:var(--s3);margin-top:6px}
 
+/* perf: let the browser skip offscreen painting */
+.ep,.hist,.side-ep{content-visibility:auto;contain-intrinsic-size:auto 120px}
+.gtile,.chip,.mini,.act{will-change:auto}
+
 /* bottom nav mobile */
 .bnav{display:none}
 @media(max-width:700px){
   .bnav{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:70;
-    background:rgba(10,10,15,.97);backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:7px 4px 9px}
+    background:rgba(10,10,15,.97);border-top:1px solid var(--line);padding:7px 4px 9px}
   .bnav a{display:grid;justify-items:center;gap:4px;font-size:10.5px;font-weight:700;color:var(--mut);padding:5px 0;border-radius:9px}
   .bnav a.on{color:var(--brand)}
   .bnav svg{width:19px;height:19px;fill:currentColor}
@@ -782,7 +785,11 @@ const I = {
 function hash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){let a=seed>>>0;return()=>{a+=0x6D2B79F5;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
 
+const ART_CACHE = new Map();
 function art(seed,hue,wide=false){
+  const key = seed + '|' + hue + '|' + wide;
+  const hit = ART_CACHE.get(key);
+  if(hit) return hit;
   const R = rng(seed);
   const W = wide?1600:420, H = wide?900:630;
   const h1 = hue, h2 = (hue+38)%360, h3 = (hue+300)%360;
@@ -790,7 +797,7 @@ function art(seed,hue,wide=false){
   const sunY = H*(.18+R()*.22);
   const sunR = wide ? Math.min(W,H)*(.17+R()*.12) : Math.min(W,H)*(.10+R()*.07);
   let petals='';
-  for(let i=0;i<26;i++){
+  for(let i=0;i<8;i++){
     const x=R()*W, y=R()*H, r=1.2+R()*3.4;
     petals+=`<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="${r.toFixed(1)}" fill="#fff" opacity="${(.05+R()*.16).toFixed(2)}"/>`;
   }
@@ -830,7 +837,9 @@ function art(seed,hue,wide=false){
   ${ridge(H*.93,H*.06,'hsl(230 40% 5%)',1)}
   <rect width="${W}" height="${H}" fill="url(#fade)"/>
 </svg>`;
-  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  const out = 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  ART_CACHE.set(key, out);
+  return out;
 }
 
 /* ---------- catalogue ---------- */
@@ -1804,7 +1813,7 @@ function card(a, o={}){
   const dub = a.dub && a.dub !== 'sub' ? `<span class="badge dub">${a.dub==='fan'?'FANDUB':'DUB'}</span>` : '';
   return `<article class="card ${o.rank?'ranked':''}" data-go="#/detail/${a.id}">
     <div class="poster">
-      <img src="${a.poster}" alt="${esc(a.title)} poster" loading="lazy">
+      <img src="${a.poster}" alt="${esc(a.title)} poster" loading="lazy" decoding="async">
       <div class="badges"><span class="badge">${esc(a.type)}</span>${a.rating?`<span class="badge score">★ ${a.rating.toFixed(1)}</span>`:''}${dub}</div>
       <button class="wl-btn ${inWl?'on':''}" data-wl="${a.id}" aria-label="Toggle watchlist">${inWl?I.check:I.plus}</button>
       <div class="play-ov"><span>${I.play}</span></div>
