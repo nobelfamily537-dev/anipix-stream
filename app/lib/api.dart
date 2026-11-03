@@ -10,6 +10,9 @@ const String kGitHubRaw =
     'https://raw.githubusercontent.com/nobelfamily537-dev/anipix-stream/main/library.json';
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
+/// Shown in the app so you can tell which build is installed.
+const String kAppVersion = '1.0.1';
+
 class Api {
   /// Reads the live library. Tries the Netlify function first (instant updates
   /// from the admin panel) and falls back to the static file in the repo.

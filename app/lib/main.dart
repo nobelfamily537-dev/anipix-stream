@@ -75,48 +75,43 @@ class _AniPixAppState extends State<AniPixApp> {
 
   @override
   Widget build(BuildContext context) {
-    if (_splash) {
-      return MaterialApp(
+    return LibScope(
+      library: _library,
+      loading: _loading,
+      error: _error,
+      reload: _load,
+      child: MaterialApp(
+        title: 'AniPix Stream',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
-        home: const SplashScreen(),
-      );
-    }
-    return MaterialApp(
-      title: 'AniPix Stream',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      home: LibScope(
-        library: _library,
-        loading: _loading,
-        error: _error,
-        reload: _load,
-        child: Builder(
-          builder: (context) => Scaffold(
-            body: IndexedStack(
-              index: _tab,
-              children: const [
-                HomeScreen(),
-                BrowseScreen(),
-                MyListScreen(),
-                ProfileScreen(),
-              ],
-            ),
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _tab,
-              onDestinationSelected: (i) => setState(() => _tab = i),
-              backgroundColor: kSurface,
-              indicatorColor: kBrand.withOpacity(0.22),
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              destinations: const [
-                NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: kBrand), label: 'Home'),
-                NavigationDestination(icon: Icon(Icons.search), selectedIcon: Icon(Icons.search, color: kBrand), label: 'Browse'),
-                NavigationDestination(icon: Icon(Icons.bookmark_border), selectedIcon: Icon(Icons.bookmark, color: kBrand), label: 'My list'),
-                NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: kBrand), label: 'You'),
-              ],
-            ),
-          ),
-        ),
+        home: _splash
+            ? const SplashScreen()
+            : Builder(
+                builder: (context) => Scaffold(
+                  body: IndexedStack(
+                    index: _tab,
+                    children: const [
+                      HomeScreen(),
+                      BrowseScreen(),
+                      MyListScreen(),
+                      ProfileScreen(),
+                    ],
+                  ),
+                  bottomNavigationBar: NavigationBar(
+                    selectedIndex: _tab,
+                    onDestinationSelected: (i) => setState(() => _tab = i),
+                    backgroundColor: kSurface,
+                    indicatorColor: kBrand.withOpacity(0.22),
+                    labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                    destinations: const [
+                      NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: kBrand), label: 'Home'),
+                      NavigationDestination(icon: Icon(Icons.search), selectedIcon: Icon(Icons.search, color: kBrand), label: 'Browse'),
+                      NavigationDestination(icon: Icon(Icons.bookmark_border), selectedIcon: Icon(Icons.bookmark, color: kBrand), label: 'My list'),
+                      NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: kBrand), label: 'You'),
+                    ],
+                  ),
+                ),
+              ),
       ),
     );
   }

@@ -104,12 +104,13 @@ class _HeroBanner extends StatelessWidget {
     final img = playlist.banner.isNotEmpty
         ? playlist.banner
         : (playlist.thumb.isNotEmpty ? playlist.thumb : '');
+    final heroHeight = (MediaQuery.sizeOf(context).height * 0.44).clamp(260.0, 420.0);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => PlaylistScreen(playlistId: playlist.id)),
       ),
       child: Container(
-        height: 230,
+        height: heroHeight,
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
@@ -321,7 +322,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         slivers: [
           SliverAppBar(
             pinned: true,
-            expandedHeight: playlist.banner.isNotEmpty ? 210 : 120,
+            expandedHeight: (MediaQuery.sizeOf(context).height * 0.34).clamp(200.0, 320.0),
             backgroundColor: kBg,
             flexibleSpace: FlexibleSpaceBar(
               background: AppImage(
@@ -1041,6 +1042,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SupportScreen()),
             ),
+          ),
+          const SizedBox(height: 18),
+          Center(
+            child: Text('AniPix Stream · v$kAppVersion',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF5C5C6B))),
           ),
           const SizedBox(height: 30),
         ],
