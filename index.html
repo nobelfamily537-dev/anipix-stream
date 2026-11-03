@@ -2065,6 +2065,7 @@ function pageWatch(id,n){
 
   return `<div class="watch">
     <div>
+      <div class="adwrap" data-ad="halfbanner"></div>
       ${playerHTML(a, e, cur)}
       <div class="wmeta">
         <h1>${esc(a.title)}<small>Season ${e.season} · Episode ${e.n}${customTitle?' · '+esc(e.title):''}</small></h1>
@@ -2605,6 +2606,20 @@ function mountAds(){
   }
 
   mountAdcash();
+  mountVignette();
+}
+
+/* ---------- Monetag vignette on the watch page (throttled) ---------- */
+const VIGNETTE = { at: 0 };
+function mountVignette(){
+  if(location.hash.indexOf('#/watch') !== 0) return;
+  const now = Date.now();
+  if(now - VIGNETTE.at < 3 * 60 * 1000) return;
+  VIGNETTE.at = now;
+  const s = document.createElement('script');
+  s.dataset.zone = '12184154';
+  s.src = 'https://n6wxm.com/vignette.min.js';
+  document.body.appendChild(s);
 }
 
 /* ---------- Adcash: video slider + interstitial (throttled) ---------- */
@@ -2665,5 +2680,6 @@ setTimeout(()=>{ if(!WL.size && !currentUser()) toast('Tip: tap the + on any pos
 
 <!-- Monetag -->
 <script src="//5gvci.com/act/files/tag.min.js?z=12180337" data-cfasync="false" async></script>
+<script>(function(s){s.dataset.zone='12184161',s.src='https://nap5k.com/tag.min.js'})([document.documentElement,document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
 </body>
 </html>
