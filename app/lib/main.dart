@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'api.dart';
@@ -24,12 +26,16 @@ class _AniPixAppState extends State<AniPixApp> {
   Library? _library;
   String? _error;
   bool _loading = true;
+  bool _splash = true;
   int _tab = 0;
 
   @override
   void initState() {
     super.initState();
     _load();
+    Timer(const Duration(milliseconds: 1900), () {
+      if (mounted) setState(() => _splash = false);
+    });
   }
 
   Future<void> _load() async {
@@ -55,6 +61,13 @@ class _AniPixAppState extends State<AniPixApp> {
 
   @override
   Widget build(BuildContext context) {
+    if (_splash) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(),
+        home: const SplashScreen(),
+      );
+    }
     return MaterialApp(
       title: 'AniPix Stream',
       debugShowCheckedModeBanner: false,
@@ -142,6 +155,43 @@ class _MyListScreenState extends State<MyListScreen> {
                 ),
               ),
             ),
+    );
+  }
+}
+
+
+/* ----------------------------------------------------------------- splash */
+
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kBg,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/logo.png', width: 148, height: 148),
+            const SizedBox(height: 26),
+            const Text(
+              'ANIPIX STREAM',
+              style: TextStyle(
+                fontSize: 25,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 3.4,
+                color: kText,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Powered by AniPix Creator',
+              style: TextStyle(fontSize: 11.5, color: kMuted, letterSpacing: .6),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -29,6 +29,9 @@ jobs:
           flutter create --platforms=android --org com.anipixstream --project-name anipix_stream /tmp/scaffold
           cp -r /tmp/scaffold/android ./app/android
           sed -i 's/android:label="anipix_stream"/android:label="AniPix Stream"/' app/android/app/src/main/AndroidManifest.xml
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp app/assets/icon/mipmap-$d/ic_launcher.png app/android/app/src/main/res/mipmap-$d/ic_launcher.png
+          done
 
       - name: Get packages
         working-directory: app
