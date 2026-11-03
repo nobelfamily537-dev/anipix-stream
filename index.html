@@ -1878,6 +1878,7 @@ function pageHome(){
   ${DB.settings.heroEnabled ? heroHTML(heroItems) : ''}
   <div class="wrap">
     <div class="adwrap" data-ad="leaderboard"></div>
+    <div class="adwrap" data-ad="halfbanner"></div>
     ${rows.map((r,i)=> (i===2?'<div class="adwrap" data-ad="square"></div>':'') + rowSection(r[0], r[1], r[2])).join('')}
     <section class="section">
       <div class="adwrap native"><div id="container-f2e7de36b1f66823892ba0209db2d652"></div></div>
@@ -1973,8 +1974,10 @@ function pageBrowse(){
       </div>
     </div>
     <div class="adwrap" data-ad="leaderboard"></div>
+    <div class="adwrap" data-ad="halfbanner"></div>
     ${list.length?`<div class="grid">${list.map(a=>card(a)).join('')}</div>`
       :`<div class="empty"><b>Nothing here yet</b>${playlists().length?'Try a different genre or clear the filters.':'No playlists have been created yet.'}</div>`}
+    <div class="adwrap" data-ad="tall"></div>
     <div style="height:60px"></div>
   </div>`;
 }
@@ -2085,6 +2088,8 @@ function pageWatch(id,n){
       </div>
 
       ${a.desc?`<p class="syn" style="color:#b9b9c8;font-size:14px;line-height:1.7;margin-top:16px;max-width:760px">${esc(a.desc)}</p>`:''}
+      <div class="adwrap" data-ad="square"></div>
+      <div class="adwrap" data-ad="skyscraper"></div>
     </div>
 
     <aside class="ep-side">
@@ -2575,6 +2580,7 @@ function mountAds(){
     if(!cfg) return;
     if(el.dataset.ad === 'leaderboard' && window.innerWidth < 820) return;
     if(el.dataset.ad === 'tall' && window.innerWidth < 1000) return;
+    if(el.dataset.ad === 'skyscraper' && window.innerWidth < 1000) return;
     el.dataset.done = '1';
     el.classList.add('adbox');
     renderBannerSlot(el, cfg);
@@ -2602,9 +2608,22 @@ function mountAds(){
 }
 
 /* ---------- Adcash: video slider + interstitial (throttled) ---------- */
-const ADCASH = { sliderAt: 0, interAt: 0 };
+const ADCASH = { sliderAt: 0, interAt: 0, waiting: false };
+
+function whenAclib(cb, tries){
+  tries = (tries === undefined) ? 60 : tries;
+  if(typeof aclib !== 'undefined' && aclib && typeof aclib.runInterstitial === 'function'){ cb(); return; }
+  if(tries <= 0) return;
+  setTimeout(()=>whenAclib(cb, tries - 1), 250);
+}
+
 function mountAdcash(){
-  if(typeof aclib === 'undefined') return;
+  if(ADCASH.waiting) return;
+  ADCASH.waiting = true;
+  whenAclib(()=>{ ADCASH.waiting = false; runAdcash(); });
+}
+
+function runAdcash(){
   const now = Date.now();
 
   // video slider: at most once every 5 minutes
