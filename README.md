@@ -1,12 +1,20 @@
 # AniPix Stream
 
-Static anime streaming site — single-file front end, no build step.
+Static anime streaming site + Flutter app, no build step for the web part.
 
-- `index.html` — the whole app (playlists, seasons, episodes, player, admin console)
-- `netlify.toml` — headers + cache rules
-- `library.json` — optional: published library (exported from Admin → Settings), baked in at deploy time
+## Web
+- `index.html` - the whole site (playlists, seasons, episodes, player, admin console)
+- `netlify.toml` - headers, functions config
+- `netlify/functions/library.mjs` - live library API (Netlify Blobs)
 
-Deployed on Netlify. All data lives in the browser (localStorage); `library.json` is what makes
-the catalogue visible to every visitor.
+## App
+- `app/` - Flutter client. Reads the same library, so content added on the
+  website appears in the app without an app update.
+- Build: GitHub Actions -> "Build APK" -> artifact `anipix-apk`.
 
-> Demo build: accounts, admin roles and the library are client-side only.
+## Publishing content
+Admin -> Settings -> "Publish to site". Needs `PUBLISH_KEY` set in Netlify
+environment variables. Published data is served from
+`/.netlify/functions/library` (falls back to `library.json`).
+
+> Demo build: accounts and watchlists are stored on the device only.
