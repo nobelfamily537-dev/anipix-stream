@@ -2562,7 +2562,11 @@ $('#formUp').onsubmit = e=>{
 
 /* ---------- load a published library.json (baked into the deployed site) ---------- */
 async function loadBakedLibrary(){
-  const sources = ['/.netlify/functions/library', 'library.json'];
+  const sources = [
+    'https://raw.githubusercontent.com/nobelfamily537-dev/anipix-stream/main/library.json',
+    '/.netlify/functions/library',
+    'library.json'
+  ];
   for(const src of sources){
     try{
       const res = await fetch(src, {cache:'no-store'});
