@@ -614,6 +614,16 @@ select:hover{border-color:#3c3c4e}
 .ep,.hist,.side-ep{content-visibility:auto;contain-intrinsic-size:auto 120px}
 .gtile,.chip,.mini,.act{will-change:auto}
 
+/* ============ ads ============ */
+.adwrap{display:flex;justify-content:center;align-items:center;margin:20px auto;overflow:hidden;max-width:100%}
+.adwrap:empty{display:none}
+.adbox::before{content:"Advertisement";display:block;text-align:center;font-size:9px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--mut2);margin-bottom:5px}
+.adwrap.native{margin:26px auto}
+.adsticky{position:fixed;left:0;right:0;bottom:56px;z-index:64;display:none;justify-content:center;
+  padding:4px 0;background:rgba(8,8,11,.94);border-top:1px solid var(--line)}
+@media(max-width:820px){.adsticky{display:flex}}
+
 /* bottom nav mobile */
 .bnav{display:none}
 @media(max-width:700px){
@@ -715,6 +725,7 @@ select:hover{border-color:#3c3c4e}
   </div>
 </footer>
 
+<div class="adsticky" data-ad="mobile"></div>
 <nav class="bnav" id="bnav">
   <a href="#/" data-go="#/"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home</a>
   <a href="#/browse" data-go="#/browse"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg>Browse</a>
@@ -1317,10 +1328,8 @@ function pageAdmin(){
               <b>library.json</b> export karo aur usko site folder mein daal ke dobara deploy karo.</p>
             <button class="btn dark sm" id="exportBtn">⬇ Export library.json</button>
             <button class="btn dark sm" id="importBtn" style="margin-left:8px">⬆ Import library.json</button>
-            <button class="btn primary sm" id="publishBtn" style="margin-left:8px">🚀 Publish to site</button>
             <input type="file" id="importFile" accept=".json,application/json" style="display:none">
             <span id="exportInfo" class="testout" style="margin-left:10px"></span>
-            <span id="publishInfo" class="testout" style="margin-left:10px"></span>
           </div>
         </div>
       </div>
@@ -1633,39 +1642,6 @@ function initAdmin(){
     toast('library.json downloaded');
   };
 
-  const pub = $('#publishBtn');
-  if(pub) pub.onclick = async ()=>{
-    const info = $('#publishInfo');
-    const payload = {version: Date.now(), site: DB.settings.siteName,
-      playlists: DB.playlists, episodes: DB.episodes, seasons: DB.seasons};
-    let key = '';
-    try{ key = localStorage.getItem('anipix_publish_key') || ''; }catch(e){}
-    if(!key){
-      key = (window.prompt('Publish key — jo Netlify environment variable PUBLISH_KEY mein daala hai:') || '').trim();
-      if(!key) return;
-    }
-    if(info){ info.className='testout'; info.textContent='Publishing…'; }
-    try{
-      const r = await fetch('/.netlify/functions/library', {
-        method:'POST',
-        headers:{'content-type':'application/json','x-publish-key':key},
-        body: JSON.stringify(payload)
-      });
-      let j = {};
-      try{ j = await r.json(); }catch(e){}
-      if(j.ok){
-        try{ localStorage.setItem('anipix_publish_key', key); }catch(e){}
-        DB.dataVersion = payload.version; saveDB();
-        if(info){ info.className='testout ok'; info.textContent='Published — site aur app dono live'; }
-        toast('Published! Site aur app dono update ho gaye');
-      }else{
-        if(info){ info.className='testout bad'; info.textContent = j.error || ('Failed ('+r.status+')'); }
-      }
-    }catch(e){
-      if(info){ info.className='testout bad'; info.textContent='Network error'; }
-    }
-  };
-
   const imp = $('#importBtn'), impFile = $('#importFile');
   if(imp && impFile){
     imp.onclick = ()=> impFile.click();
@@ -1900,8 +1876,10 @@ function pageHome(){
   return `
   ${DB.settings.heroEnabled ? heroHTML(heroItems) : ''}
   <div class="wrap">
-    ${rows.map(r=>rowSection(r[0], r[1], r[2])).join('')}
+    <div class="adwrap" data-ad="leaderboard"></div>
+    ${rows.map((r,i)=> (i===2?'<div class="adwrap" data-ad="square"></div>':'') + rowSection(r[0], r[1], r[2])).join('')}
     <section class="section">
+      <div class="adwrap native"><div id="container-f2e7de36b1f66823892ba0209db2d652"></div></div>
       <div class="row-h"><h2>Browse by genre</h2><a href="#/browse" data-go="#/browse">All genres →</a></div>
       <div class="gstrip">
         ${GENRES.map((g,i)=>`<div class="gtile" data-go="#/browse/${g}" style="background-image:url('${art(hash(g),(i*47)%360,true)}');background-size:cover;background-position:center"><b>${g}</b></div>`).join('')}
@@ -1993,6 +1971,7 @@ function pageBrowse(){
         </select>
       </div>
     </div>
+    <div class="adwrap" data-ad="leaderboard"></div>
     ${list.length?`<div class="grid">${list.map(a=>card(a)).join('')}</div>`
       :`<div class="empty"><b>Nothing here yet</b>${playlists().length?'Try a different genre or clear the filters.':'No playlists have been created yet.'}</div>`}
     <div style="height:60px"></div>
@@ -2248,6 +2227,7 @@ function render(){
   syncChrome();
   scrollTop();
   afterRender(page);
+  setTimeout(mountAds, 60);
 }
 
 function afterRender(page){
@@ -2560,28 +2540,78 @@ $('#formUp').onsubmit = e=>{
   };
 });
 
+/* =====================================================================
+   Ads
+   ===================================================================== */
+const AD_UNITS = {
+  leaderboard: { key:'a84b17454d6c1f1ef43127749989dd23', w:728, h:90 },
+  square:      { key:'2c930c239f5090f27cb86bfdaf57cd57', w:300, h:250 },
+  halfbanner:  { key:'39ff7ce7b6723241c6bf7ace415c8654', w:468, h:60 },
+  mobile:      { key:'1da5b98f162590bbe11fc9112325a6d1', w:320, h:50 },
+  tall:        { key:'40bd7870f63de63ad9ebc597c860f01e', w:160, h:300 },
+  skyscraper:  { key:'0bbbebff73592c9699e2e92ebae349f7', w:160, h:600 }
+};
+let nativeLoaded = false, socialLoaded = false;
+
+function renderBannerSlot(el, cfg){
+  const html = '<!doctype html><html><head><meta charset="utf-8"></head>'
+    + '<body style="margin:0;overflow:hidden;background:transparent">'
+    + '<script>atOptions={key:"' + cfg.key + '",format:"iframe",height:' + cfg.h + ',width:' + cfg.w + ',params:{}};<\/script>'
+    + '<script src="https://www.highrevenueformat.com/' + cfg.key + '/invoke.js"><\/script>'
+    + '</body></html>';
+  const f = document.createElement('iframe');
+  f.width = cfg.w; f.height = cfg.h;
+  f.setAttribute('scrolling','no'); f.setAttribute('frameborder','0');
+  f.style.cssText = 'border:0;display:block;margin:0 auto;max-width:100%';
+  f.srcdoc = html;
+  el.appendChild(f);
+}
+
+function mountAds(){
+  $$('[data-ad]').forEach(el=>{
+    if(el.dataset.done) return;
+    const cfg = AD_UNITS[el.dataset.ad];
+    if(!cfg) return;
+    if(el.dataset.ad === 'leaderboard' && window.innerWidth < 820) return;
+    if(el.dataset.ad === 'tall' && window.innerWidth < 1000) return;
+    el.dataset.done = '1';
+    el.classList.add('adbox');
+    renderBannerSlot(el, cfg);
+  });
+
+  const nat = document.getElementById('container-f2e7de36b1f66823892ba0209db2d652');
+  if(nat && !nativeLoaded){
+    nativeLoaded = true;
+    const sc = document.createElement('script');
+    sc.async = true;
+    sc.setAttribute('data-cfasync','false');
+    sc.src = 'https://pl32166346.profitableratecpmnetwork.com/f2e7de36b1f66823892ba0209db2d652/invoke.js';
+    nat.parentNode.insertBefore(sc, nat);
+  }
+
+  if(!socialLoaded){
+    socialLoaded = true;
+    const sb = document.createElement('script');
+    sb.async = true;
+    sb.src = 'https://pl32166347.profitableratecpmnetwork.com/54/9f/6c/549f6c9b1176fbe00992321c0e3d1281.js';
+    document.body.appendChild(sb);
+  }
+}
+
 /* ---------- load a published library.json (baked into the deployed site) ---------- */
 async function loadBakedLibrary(){
-  const sources = [
-    'https://raw.githubusercontent.com/nobelfamily537-dev/anipix-stream/main/library.json',
-    '/.netlify/functions/library',
-    'library.json'
-  ];
-  for(const src of sources){
-    try{
-      const res = await fetch(src, {cache:'no-store'});
-      if(!res.ok) continue;
-      const j = await res.json();
-      if(!j || !j.version) continue;
-      if((DB.dataVersion || 0) >= j.version) return;
-      DB.playlists = j.playlists || [];
-      DB.episodes  = j.episodes  || [];
-      DB.seasons   = j.seasons   || [];
-      DB.dataVersion = j.version;
-      saveDB(); buildCatalogue(); render();
-      return;
-    }catch(e){ /* try the next source */ }
-  }
+  try{
+    const res = await fetch('library.json', {cache:'no-store'});
+    if(!res.ok) return;
+    const j = await res.json();
+    if(!j || !j.version) return;
+    if((DB.dataVersion || 0) >= j.version) return;
+    DB.playlists = j.playlists || [];
+    DB.episodes  = j.episodes  || [];
+    DB.seasons   = j.seasons   || [];
+    DB.dataVersion = j.version;
+    saveDB(); buildCatalogue(); render();
+  }catch(e){ /* file:// or missing — ignore */ }
 }
 loadBakedLibrary();
 
