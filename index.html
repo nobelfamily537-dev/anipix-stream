@@ -1317,8 +1317,10 @@ function pageAdmin(){
               <b>library.json</b> export karo aur usko site folder mein daal ke dobara deploy karo.</p>
             <button class="btn dark sm" id="exportBtn">⬇ Export library.json</button>
             <button class="btn dark sm" id="importBtn" style="margin-left:8px">⬆ Import library.json</button>
+            <button class="btn primary sm" id="publishBtn" style="margin-left:8px">🚀 Publish to site</button>
             <input type="file" id="importFile" accept=".json,application/json" style="display:none">
             <span id="exportInfo" class="testout" style="margin-left:10px"></span>
+            <span id="publishInfo" class="testout" style="margin-left:10px"></span>
           </div>
         </div>
       </div>
@@ -1629,6 +1631,39 @@ function initAdmin(){
     const info = $('#exportInfo');
     if(info){ info.className='testout ok'; info.textContent='Downloaded — Netlify folder mein daal ke deploy karo'; }
     toast('library.json downloaded');
+  };
+
+  const pub = $('#publishBtn');
+  if(pub) pub.onclick = async ()=>{
+    const info = $('#publishInfo');
+    const payload = {version: Date.now(), site: DB.settings.siteName,
+      playlists: DB.playlists, episodes: DB.episodes, seasons: DB.seasons};
+    let key = '';
+    try{ key = localStorage.getItem('anipix_publish_key') || ''; }catch(e){}
+    if(!key){
+      key = (window.prompt('Publish key — jo Netlify environment variable PUBLISH_KEY mein daala hai:') || '').trim();
+      if(!key) return;
+    }
+    if(info){ info.className='testout'; info.textContent='Publishing…'; }
+    try{
+      const r = await fetch('/.netlify/functions/library', {
+        method:'POST',
+        headers:{'content-type':'application/json','x-publish-key':key},
+        body: JSON.stringify(payload)
+      });
+      let j = {};
+      try{ j = await r.json(); }catch(e){}
+      if(j.ok){
+        try{ localStorage.setItem('anipix_publish_key', key); }catch(e){}
+        DB.dataVersion = payload.version; saveDB();
+        if(info){ info.className='testout ok'; info.textContent='Published — site aur app dono live'; }
+        toast('Published! Site aur app dono update ho gaye');
+      }else{
+        if(info){ info.className='testout bad'; info.textContent = j.error || ('Failed ('+r.status+')'); }
+      }
+    }catch(e){
+      if(info){ info.className='testout bad'; info.textContent='Network error'; }
+    }
   };
 
   const imp = $('#importBtn'), impFile = $('#importFile');
@@ -2527,18 +2562,22 @@ $('#formUp').onsubmit = e=>{
 
 /* ---------- load a published library.json (baked into the deployed site) ---------- */
 async function loadBakedLibrary(){
-  try{
-    const res = await fetch('library.json', {cache:'no-store'});
-    if(!res.ok) return;
-    const j = await res.json();
-    if(!j || !j.version) return;
-    if((DB.dataVersion || 0) >= j.version) return;
-    DB.playlists = j.playlists || [];
-    DB.episodes  = j.episodes  || [];
-    DB.seasons   = j.seasons   || [];
-    DB.dataVersion = j.version;
-    saveDB(); buildCatalogue(); render();
-  }catch(e){ /* file:// or missing — ignore */ }
+  const sources = ['/.netlify/functions/library', 'library.json'];
+  for(const src of sources){
+    try{
+      const res = await fetch(src, {cache:'no-store'});
+      if(!res.ok) continue;
+      const j = await res.json();
+      if(!j || !j.version) continue;
+      if((DB.dataVersion || 0) >= j.version) return;
+      DB.playlists = j.playlists || [];
+      DB.episodes  = j.episodes  || [];
+      DB.seasons   = j.seasons   || [];
+      DB.dataVersion = j.version;
+      saveDB(); buildCatalogue(); render();
+      return;
+    }catch(e){ /* try the next source */ }
+  }
 }
 loadBakedLibrary();
 
