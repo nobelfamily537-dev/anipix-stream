@@ -2566,7 +2566,7 @@ $('#formUp').onsubmit = e=>{
 });
 
 /* =====================================================================
-   Ads
+   Ads — lazy loaded so the page stays fast
    ===================================================================== */
 const AD_UNITS = {
   leaderboard: { key:'a84b17454d6c1f1ef43127749989dd23', w:728, h:90 },
@@ -2576,7 +2576,8 @@ const AD_UNITS = {
   tall:        { key:'40bd7870f63de63ad9ebc597c860f01e', w:160, h:300 },
   skyscraper:  { key:'0bbbebff73592c9699e2e92ebae349f7', w:160, h:600 }
 };
-let nativeLoaded = false, socialLoaded = false;
+
+let nativeLoaded = false, socialLoaded = false, globalsStarted = false, adObserver = null;
 
 function renderBannerSlot(el, cfg){
   const html = '<!doctype html><html><head><meta charset="utf-8"></head>'
@@ -2592,6 +2593,39 @@ function renderBannerSlot(el, cfg){
   el.appendChild(f);
 }
 
+/* build one banner when it is actually near the viewport */
+function buildAd(el){
+  if(!el || el.dataset.done) return;
+  let kind = el.dataset.ad;
+  if(kind === 'leaderboard' && window.innerWidth < 820) return;
+  if((kind === 'tall' || kind === 'skyscraper') && window.innerWidth < 1000) return;
+  if(kind === 'halfbanner' && window.innerWidth < 520) kind = 'mobile';
+  if(el.closest('.poverlay') && window.innerWidth < 560) kind = 'mobile';
+  const cfg = AD_UNITS[kind];
+  if(!cfg) return;
+  el.dataset.done = '1';
+  el.classList.add('adbox');
+  renderBannerSlot(el, cfg);
+}
+
+function observeAds(){
+  const els = $$('[data-ad]');
+  if(!('IntersectionObserver' in window)){ els.forEach(buildAd); return; }
+  if(!adObserver){
+    adObserver = new IntersectionObserver(function(list){
+      list.forEach(function(entry){
+        if(entry.isIntersecting){ adObserver.unobserve(entry.target); buildAd(entry.target); }
+      });
+    }, { rootMargin: '220px' });
+  }
+  els.forEach(function(el){
+    if(el.dataset.done || el.dataset.watched) return;
+    el.dataset.watched = '1';
+    adObserver.observe(el);
+  });
+}
+
+/* ---------- player overlay ---------- */
 function closeOverlay(){
   const ov = document.getElementById('poverlay');
   if(ov) ov.classList.add('hide');
@@ -2605,46 +2639,69 @@ function wireOverlay(){
   const ov = document.getElementById('poverlay');
   if(ov && !ov.dataset.auto){
     ov.dataset.auto = '1';
-    setTimeout(closeOverlay, 12000);
+    setTimeout(closeOverlay, 30000);
   }
 }
 
-function mountAds(){
-  wireOverlay();
-  $$('[data-ad]').forEach(el=>{
-    if(el.dataset.done) return;
-    const cfg = AD_UNITS[el.dataset.ad];
-    if(!cfg) return;
-    if(el.dataset.ad === 'leaderboard' && window.innerWidth < 820) return;
-    if(el.dataset.ad === 'tall' && window.innerWidth < 1000) return;
-    if(el.dataset.ad === 'halfbanner' && window.innerWidth < 520) el.dataset.ad = 'mobile';
-    if(el.closest('.poverlay') && window.innerWidth < 560) el.dataset.ad = 'mobile';
-    if(el.dataset.ad === 'skyscraper' && window.innerWidth < 1000) return;
-    el.dataset.done = '1';
-    el.classList.add('adbox');
-    renderBannerSlot(el, cfg);
+/* ---------- heavy third-party scripts, after the page is ready ---------- */
+function afterLoad(fn){
+  if(document.readyState === 'complete') setTimeout(fn, 1200);
+  else window.addEventListener('load', function(){ setTimeout(fn, 1200); });
+}
+
+function mountGlobals(){
+  if(globalsStarted) return;
+  globalsStarted = true;
+  afterLoad(function(){
+    /* Adsterra native banner */
+    const nat = document.getElementById('container-f2e7de36b1f66823892ba0209db2d652');
+    if(nat && !nativeLoaded){
+      nativeLoaded = true;
+      const sc = document.createElement('script');
+      sc.async = true;
+      sc.setAttribute('data-cfasync','false');
+      sc.src = 'https://pl32166346.profitableratecpmnetwork.com/f2e7de36b1f66823892ba0209db2d652/invoke.js';
+      nat.parentNode.insertBefore(sc, nat);
+    }
+    /* Adsterra social bar */
+    if(!socialLoaded){
+      socialLoaded = true;
+      const sb = document.createElement('script');
+      sb.async = true;
+      sb.src = 'https://pl32166347.profitableratecpmnetwork.com/54/9f/6c/549f6c9b1176fbe00992321c0e3d1281.js';
+      document.body.appendChild(sb);
+    }
+    mountAdcash();
+    mountVignette();
   });
+}
 
-  const nat = document.getElementById('container-f2e7de36b1f66823892ba0209db2d652');
-  if(nat && !nativeLoaded){
-    nativeLoaded = true;
-    const sc = document.createElement('script');
-    sc.async = true;
-    sc.setAttribute('data-cfasync','false');
-    sc.src = 'https://pl32166346.profitableratecpmnetwork.com/f2e7de36b1f66823892ba0209db2d652/invoke.js';
-    nat.parentNode.insertBefore(sc, nat);
+/* ---------- Adcash: video slider + interstitial (throttled) ---------- */
+const ADCASH = { sliderAt: 0, interAt: 0, waiting: false };
+
+function whenAclib(cb, tries){
+  tries = (tries === undefined) ? 60 : tries;
+  if(typeof aclib !== 'undefined' && aclib && typeof aclib.runInterstitial === 'function'){ cb(); return; }
+  if(tries <= 0) return;
+  setTimeout(function(){ whenAclib(cb, tries - 1); }, 250);
+}
+
+function mountAdcash(){
+  if(ADCASH.waiting) return;
+  ADCASH.waiting = true;
+  whenAclib(function(){ ADCASH.waiting = false; runAdcash(); });
+}
+
+function runAdcash(){
+  const now = Date.now();
+  if(now - ADCASH.sliderAt > 5 * 60 * 1000){
+    ADCASH.sliderAt = now;
+    try{ aclib.runVideoSlider({ zoneId: '12400310' }); }catch(e){}
   }
-
-  if(!socialLoaded){
-    socialLoaded = true;
-    const sb = document.createElement('script');
-    sb.async = true;
-    sb.src = 'https://pl32166347.profitableratecpmnetwork.com/54/9f/6c/549f6c9b1176fbe00992321c0e3d1281.js';
-    document.body.appendChild(sb);
+  if(now - ADCASH.interAt > 4 * 60 * 1000){
+    ADCASH.interAt = now;
+    setTimeout(function(){ try{ aclib.runInterstitial({ zoneId: '12400314' }); }catch(e){} }, 2200);
   }
-
-  mountAdcash();
-  mountVignette();
 }
 
 /* ---------- Monetag vignette on the watch page (throttled) ---------- */
@@ -2660,36 +2717,11 @@ function mountVignette(){
   document.body.appendChild(s);
 }
 
-/* ---------- Adcash: video slider + interstitial (throttled) ---------- */
-const ADCASH = { sliderAt: 0, interAt: 0, waiting: false };
-
-function whenAclib(cb, tries){
-  tries = (tries === undefined) ? 60 : tries;
-  if(typeof aclib !== 'undefined' && aclib && typeof aclib.runInterstitial === 'function'){ cb(); return; }
-  if(tries <= 0) return;
-  setTimeout(()=>whenAclib(cb, tries - 1), 250);
-}
-
-function mountAdcash(){
-  if(ADCASH.waiting) return;
-  ADCASH.waiting = true;
-  whenAclib(()=>{ ADCASH.waiting = false; runAdcash(); });
-}
-
-function runAdcash(){
-  const now = Date.now();
-
-  // video slider: at most once every 5 minutes
-  if(now - ADCASH.sliderAt > 5 * 60 * 1000){
-    ADCASH.sliderAt = now;
-    try{ aclib.runVideoSlider({ zoneId: '12400310' }); }catch(e){}
-  }
-
-  // interstitial: at most once every 4 minutes, delayed so it does not block render
-  if(now - ADCASH.interAt > 4 * 60 * 1000){
-    ADCASH.interAt = now;
-    setTimeout(()=>{ try{ aclib.runInterstitial({ zoneId: '12400314' }); }catch(e){} }, 2200);
-  }
+/* ---------- entry point, called after every render ---------- */
+function mountAds(){
+  wireOverlay();
+  observeAds();
+  mountGlobals();
 }
 
 /* ---------- load a published library.json (baked into the deployed site) ---------- */
