@@ -45,6 +45,12 @@ jobs:
           print('INTERNET permission present:', 'android.permission.INTERNET' in open(p).read())
           PY
 
+      - name: Use a stable signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 -d app/keystore.b64 > "$HOME/.android/debug.keystore"
+          ls -l "$HOME/.android/debug.keystore"
+
       - name: Get packages
         working-directory: app
         run: flutter pub get
