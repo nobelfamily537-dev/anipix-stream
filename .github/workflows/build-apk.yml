@@ -33,6 +33,18 @@ jobs:
             cp app/assets/icon/mipmap-$d/ic_launcher.png app/android/app/src/main/res/mipmap-$d/ic_launcher.png
           done
 
+      - name: Add INTERNET permission
+        run: |
+          python3 - <<'PY'
+          p = 'app/android/app/src/main/AndroidManifest.xml'
+          src = open(p).read()
+          if 'android.permission.INTERNET' not in src:
+              src = src.replace('<application',
+                                '<uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
+              open(p, 'w').write(src)
+          print('INTERNET permission present:', 'android.permission.INTERNET' in open(p).read())
+          PY
+
       - name: Get packages
         working-directory: app
         run: flutter pub get

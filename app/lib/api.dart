@@ -4,6 +4,10 @@ import 'models.dart';
 
 /// Where the published library lives. Change this if the site moves.
 const String kBaseUrl = 'https://anipix-stream.netlify.app';
+
+/// Content lives in the GitHub repo — this is the source of truth.
+const String kGitHubRaw =
+    'https://raw.githubusercontent.com/nobelfamily537-dev/anipix-stream/main/library.json';
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
 class Api {
@@ -11,6 +15,7 @@ class Api {
   /// from the admin panel) and falls back to the static file in the repo.
   static Future<Library> fetchLibrary() async {
     final sources = <String>[
+      kGitHubRaw,
       '$kBaseUrl/.netlify/functions/library',
       '$kBaseUrl/library.json',
     ];
