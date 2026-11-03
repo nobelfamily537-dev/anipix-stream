@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#08080B</color>
+    <color name="surface">#12121A</color>
+    <color name="brand">#F47521</color>
+    <color name="text">#F3F3F7</color>
+    <color name="muted">#9A9AAB</color>
+</resources>
