@@ -88,8 +88,6 @@ class HomeScreen extends StatelessWidget {
           const SectionTitle('Top rated'),
           _Row(items: top, library: lib),
         ],
-        const SectionTitle('All playlists'),
-        _Row(items: lib.playlists, library: lib),
         const SizedBox(height: 24),
       ],
     );
@@ -121,9 +119,7 @@ class _HeroBanner extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (img.isNotEmpty)
-              Image.network(img, fit: BoxFit.cover, cacheWidth: 900,
-                  errorBuilder: (_, __, ___) => Container(color: kSurface2)),
+            AppImage(src: img, cacheWidth: 900, fallback: Container(color: kSurface2)),
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -328,10 +324,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             expandedHeight: playlist.banner.isNotEmpty ? 210 : 120,
             backgroundColor: kBg,
             flexibleSpace: FlexibleSpaceBar(
-              background: playlist.banner.isNotEmpty
-                  ? Image.network(playlist.banner, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(color: kSurface2))
-                  : Container(color: kSurface2),
+              background: AppImage(
+                src: playlist.banner.isNotEmpty ? playlist.banner : playlist.thumb,
+                cacheWidth: 900,
+                fallback: Container(color: kSurface2),
+              ),
             ),
           ),
           SliverToBoxAdapter(
@@ -993,10 +990,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             borderRadius: BorderRadius.circular(9),
                             child: AspectRatio(
                               aspectRatio: 16 / 9,
-                              child: p.thumb.isNotEmpty
-                                  ? Image.network(p.thumb, fit: BoxFit.cover, cacheWidth: 320,
-                                      errorBuilder: (_, __, ___) => Container(color: kSurface2))
-                                  : Container(color: kSurface2),
+                              child: AppImage(src: p.thumb, fallback: Container(color: kSurface2)),
                             ),
                           ),
                           const SizedBox(height: 6),

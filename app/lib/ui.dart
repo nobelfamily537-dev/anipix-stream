@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'models.dart';
 
@@ -48,6 +50,48 @@ ThemeData buildTheme() {
   );
 }
 
+/// Shows a remote URL *or* a base64 data-URI (the admin panel stores
+/// uploaded posters as data URIs, which Image.network cannot handle).
+class AppImage extends StatelessWidget {
+  final String src;
+  final BoxFit fit;
+  final int cacheWidth;
+  final Widget? fallback;
+
+  const AppImage({
+    super.key,
+    required this.src,
+    this.fit = BoxFit.cover,
+    this.cacheWidth = 320,
+    this.fallback,
+  });
+
+  static bool isDataUri(String s) => s.startsWith('data:image');
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = fallback ?? const _PosterFallback();
+    if (src.isEmpty) return empty;
+
+    if (isDataUri(src)) {
+      try {
+        final comma = src.indexOf(',');
+        final bytes = base64Decode(src.substring(comma + 1));
+        return Image.memory(bytes, fit: fit, gaplessPlayback: true);
+      } catch (_) {
+        return empty;
+      }
+    }
+
+    return Image.network(
+      src,
+      fit: fit,
+      cacheWidth: cacheWidth,
+      errorBuilder: (_, __, ___) => empty,
+    );
+  }
+}
+
 class PosterCard extends StatelessWidget {
   final Playlist playlist;
   final VoidCallback onTap;
@@ -71,14 +115,7 @@ class PosterCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    playlist.thumb.isNotEmpty
-                        ? Image.network(
-                            playlist.thumb,
-                            fit: BoxFit.cover,
-                            cacheWidth: 320,
-                            errorBuilder: (_, __, ___) => const _PosterFallback(),
-                          )
-                        : const _PosterFallback(),
+                    AppImage(src: playlist.thumb),
                     Positioned(
                       left: 6,
                       top: 6,
