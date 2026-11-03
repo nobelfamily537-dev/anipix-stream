@@ -1,0 +1,48 @@
+name: Build APK
+
+on:
+  push:
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.24.5'
+          cache: true
+
+      - name: Add android platform folder
+        run: |
+          flutter create --platforms=android --org com.anipixstream --project-name anipix_stream /tmp/scaffold
+          cp -r /tmp/scaffold/android ./app/android
+          sed -i 's/android:label="anipix_stream"/android:label="AniPix Stream"/' app/android/app/src/main/AndroidManifest.xml
+
+      - name: Get packages
+        working-directory: app
+        run: flutter pub get
+
+      - name: Build release APKs (split per ABI)
+        working-directory: app
+        run: flutter build apk --release --split-per-abi
+
+      - name: Show sizes
+        run: ls -lh app/build/app/outputs/flutter-apk/ || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anipix-apk
+          path: app/build/app/outputs/flutter-apk/*.apk
+          retention-days: 30
