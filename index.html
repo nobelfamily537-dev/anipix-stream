@@ -1955,7 +1955,7 @@ function pageHome(){
     <div class="adwrap" data-ad="halfbanner"></div>
     ${rows.map((r,i)=> (i===2?'<div class="adwrap" data-ad="square"></div>':'') + rowSection(r[0], r[1], r[2])).join('')}
     <section class="section">
-      <div class="adwrap native"><div id="container-f2e7de36b1f66823892ba0209db2d652"></div></div>
+      <div class="adwrap native"><div id="container-4edabf2b28e1fa05dec523de434b288e"></div></div>
       <div class="row-h"><h2>Browse by genre</h2><a href="#/browse" data-go="#/browse">All genres →</a></div>
       <div class="gstrip">
         ${GENRES.map((g,i)=>`<div class="gtile" data-go="#/browse/${g}" style="background-image:url('${art(hash(g),(i*47)%360,true)}');background-size:cover;background-position:center"><b>${g}</b></div>`).join('')}
@@ -2649,13 +2649,17 @@ function apiFetch(name, opts){
    Ads — lazy loaded so the page stays fast
    ===================================================================== */
 const AD_UNITS = {
-  leaderboard: { key:'a84b17454d6c1f1ef43127749989dd23', w:728, h:90 },
-  square:      { key:'2c930c239f5090f27cb86bfdaf57cd57', w:300, h:250 },
-  halfbanner:  { key:'39ff7ce7b6723241c6bf7ace415c8654', w:468, h:60 },
-  mobile:      { key:'1da5b98f162590bbe11fc9112325a6d1', w:320, h:50 },
-  tall:        { key:'40bd7870f63de63ad9ebc597c860f01e', w:160, h:300 },
-  skyscraper:  { key:'0bbbebff73592c9699e2e92ebae349f7', w:160, h:600 }
+  leaderboard: { key:'fe2544268d19dc086653214a8b8fddd3', w:728, h:90,  src:'https://www.highrevenueformat.com/fe2544268d19dc086653214a8b8fddd3/invoke.js' },
+  square:      { key:'f9a4056d60151a1246ca20b9d73a1cce', w:300, h:250, src:'https://www.highrevenueformat.com/f9a4056d60151a1246ca20b9d73a1cce/invoke.js' },
+  halfbanner:  { key:'c0ba0e4b1c2f61782935f5c21c9600e9', w:468, h:60,  src:'https://www.highrevenueformat.com/c0ba0e4b1c2f61782935f5c21c9600e9/invoke.js' },
+  mobile:      { key:'b982f025e1ab43f5016bc71dcd97ae5d', w:320, h:50,  src:'https://www.highrevenueformat.com/b982f025e1ab43f5016bc71dcd97ae5d/invoke.js' },
+  tall:        { key:'33a64694a18b860ab73846c81857daf4', w:160, h:300, src:'https://bauval.org/22/33a64694a18b860ab73846c81857daf4' },
+  skyscraper:  { key:'5578e1f4d9f1b4e813f10bb3b0d0bca4', w:160, h:600, src:'https://www.highrevenueformat.com/5578e1f4d9f1b4e813f10bb3b0d0bca4/invoke.js' }
 };
+
+const NATIVE_CONTAINER = 'container-4edabf2b28e1fa05dec523de434b288e';
+const NATIVE_SRC = 'https://pl32185318.profitableratecpmnetwork.com/4edabf2b28e1fa05dec523de434b288e/invoke.js';
+const SOCIAL_SRC = 'https://pl32185325.profitableratecpmnetwork.com/8c/24/1a/8c241a2e6cd612411b6c006071f4c7a4.js';
 
 let nativeLoaded = false, socialLoaded = false, globalsStarted = false, adObserver = null;
 
@@ -2663,7 +2667,7 @@ function renderBannerSlot(el, cfg){
   const html = '<!doctype html><html><head><meta charset="utf-8"></head>'
     + '<body style="margin:0;overflow:hidden;background:transparent">'
     + '<script>atOptions={key:"' + cfg.key + '",format:"iframe",height:' + cfg.h + ',width:' + cfg.w + ',params:{}};<\/script>'
-    + '<script src="https://www.highrevenueformat.com/' + cfg.key + '/invoke.js"><\/script>'
+    + '<script src="' + cfg.src + '"><\/script>'
     + '</body></html>';
   const f = document.createElement('iframe');
   f.width = cfg.w; f.height = cfg.h;
@@ -2746,13 +2750,13 @@ function mountGlobals(){
   globalsStarted = true;
   afterLoad(function(){
     /* Adsterra native banner */
-    const nat = document.getElementById('container-f2e7de36b1f66823892ba0209db2d652');
+    const nat = document.getElementById(NATIVE_CONTAINER);
     if(nat && !nativeLoaded){
       nativeLoaded = true;
       const sc = document.createElement('script');
       sc.async = true;
       sc.setAttribute('data-cfasync','false');
-      sc.src = 'https://pl32166346.profitableratecpmnetwork.com/f2e7de36b1f66823892ba0209db2d652/invoke.js';
+      sc.src = NATIVE_SRC;
       nat.parentNode.insertBefore(sc, nat);
     }
     /* Adsterra social bar */
@@ -2760,7 +2764,7 @@ function mountGlobals(){
       socialLoaded = true;
       const sb = document.createElement('script');
       sb.async = true;
-      sb.src = 'https://pl32166347.profitableratecpmnetwork.com/54/9f/6c/549f6c9b1176fbe00992321c0e3d1281.js';
+      sb.src = SOCIAL_SRC;
       document.body.appendChild(sb);
     }
     mountAdcash();
@@ -2788,11 +2792,11 @@ function runAdcash(){
   const now = Date.now();
   if(now - ADCASH.sliderAt > 5 * 60 * 1000){
     ADCASH.sliderAt = now;
-    try{ aclib.runVideoSlider({ zoneId: '12400310' }); }catch(e){}
+    try{ aclib.runVideoSlider({ zoneId: '12404350' }); }catch(e){}
   }
   if(now - ADCASH.interAt > 4 * 60 * 1000){
     ADCASH.interAt = now;
-    setTimeout(function(){ try{ aclib.runInterstitial({ zoneId: '12400314' }); }catch(e){} }, 2200);
+    setTimeout(function(){ try{ aclib.runInterstitial({ zoneId: '12404354' }); }catch(e){} }, 2200);
   }
 }
 
@@ -2928,6 +2932,13 @@ function showFullAd(target, done){
 
   const slot = document.getElementById('faAd');
   if(slot) buildAd(slot);
+
+  /* Adcash interstitial — this is the full page ad on every playlist/episode tap */
+  if(typeof aclib !== 'undefined' && aclib && typeof aclib.runInterstitial === 'function'){
+    try{ aclib.runInterstitial({ zoneId: '12404354' }); }catch(e){}
+  } else {
+    whenAclib(function(){ try{ aclib.runInterstitial({ zoneId: '12404354' }); }catch(e){} });
+  }
   mountVignette(true);
 
   const btn = document.getElementById('faSkip');

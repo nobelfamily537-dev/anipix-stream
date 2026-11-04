@@ -4,7 +4,7 @@
  * Only the allowlisted ad host can be fetched (not an open proxy).
  */
 
-const DEFAULT_TAG = 'https://youradexchange.com/video/select.php?r=12400306';
+const DEFAULT_TAG = 'https://youradexchange.com/video/select.php?r=12404346';
 const ALLOWED_HOSTS = ['youradexchange.com', 'www.youradexchange.com'];
 
 const XML_HEADERS = {

@@ -5,7 +5,7 @@
  *   everything else -> static assets from ./dist
  */
 
-const DEFAULT_TAG = 'https://youradexchange.com/video/select.php';
+const DEFAULT_TAG = 'https://youradexchange.com/video/select.php?r=12404346';
 const ALLOWED_HOSTS = ['youradexchange.com', 'www.youradexchange.com'];
 
 const REPO = 'nobelfamily537-dev/anipix-stream';
