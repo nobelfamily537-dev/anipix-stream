@@ -1819,7 +1819,7 @@ function playerHTML(a, e, cur){
     return `${bar}<div class="player has-src" id="player">
       <div class="pl-badge">${esc(a.title.toUpperCase())} · S${e.season} E${e.n}</div>
       <div class="src-chip">EMBED</div>
-      <iframe id="embedFrame" class="realvid" src="${esc(src.url)}" title="${esc(a.title)} episode ${cur}"
+      <iframe id="embedFrame" class="realvid" data-src="${esc(src.url)}" title="${esc(a.title)} episode ${cur}"
         allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin"></iframe>
     </div>`;
   }
@@ -2781,24 +2781,31 @@ function skipSeconds(v){
   return 5;
 }
 
+function revealPlayer(){
+  const frame = document.getElementById('embedFrame');
+  if(frame && frame.dataset.src && !frame.getAttribute('src')){
+    frame.setAttribute('src', frame.dataset.src);
+  }
+}
+
 function setupPreroll(){
   const player = document.getElementById('player');
-  const vid = document.getElementById('vid');
-  if(!player || !vid) return;                       /* embeds: nothing we can do */
+  if(!player) return;
   const now = Date.now();
-  if(now - prerollAt < 5 * 60 * 1000) return;        /* max one pre-roll per 5 minutes */
+  if(now - prerollAt < 5 * 60 * 1000){ revealPlayer(); return; }  /* max one per 5 min */
   prerollAt = now;
 
   fetch(VAST_TAG, { cache:'no-store' })
     .then(function(r){ return r.ok ? r.text() : ''; })
     .then(function(txt){
       const vast = txt ? parseVast(txt) : null;
-      if(vast) showPreroll(player, vid, vast);
+      if(vast) showPreroll(player, vast);
+      else revealPlayer();
     })
-    .catch(function(){ /* CORS / network: skip silently */ });
+    .catch(function(){ revealPlayer(); });   /* CORS / network: just play the episode */
 }
 
-function showPreroll(player, vid, vast){
+function showPreroll(player, vast){
   const wrap = document.createElement('div');
   wrap.className = 'preroll';
   wrap.innerHTML = '<div class="pr-ads">Advertisement</div>'
@@ -2829,8 +2836,13 @@ function showPreroll(player, vid, vast){
   function end(){
     clearInterval(timer);
     if(wrap.parentNode) wrap.parentNode.removeChild(wrap);
-    try{ vid.play(); }catch(e){}
+    revealPlayer();
+    const vid = document.getElementById('vid');
+    if(vid){ try{ vid.play(); }catch(e){} }
   }
+
+  /* safety: if the creative never starts, do not block the episode */
+  setTimeout(function(){ if(av.readyState === 0) end(); }, 7000);
   skipBtn.onclick = end;
   av.onended = end;
   av.onerror = end;
