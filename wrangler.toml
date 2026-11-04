@@ -1,0 +1,10 @@
+name = "anipix-stream"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[observability]
+enabled = true
