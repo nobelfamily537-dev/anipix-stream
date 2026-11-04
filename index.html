@@ -634,6 +634,16 @@ select:hover{border-color:#3c3c4e}
   padding:4px 0;background:rgba(8,8,11,.94);border-top:1px solid var(--line)}
 @media(max-width:820px){.adsticky{display:flex}}
 
+/* VAST pre-roll */
+.player{position:relative}
+.preroll{position:absolute;inset:0;z-index:9;background:#000;display:flex;align-items:center;justify-content:center}
+.pr-vid{width:100%;height:100%;object-fit:contain;background:#000}
+.pr-ads{position:absolute;top:10px;left:12px;z-index:2;font-size:9px;letter-spacing:.16em;
+  text-transform:uppercase;color:#9a9aab;background:rgba(0,0,0,.55);padding:3px 7px;border-radius:4px}
+.pr-skip{position:absolute;bottom:14px;right:14px;z-index:2;padding:8px 14px;border-radius:8px;
+  border:1px solid #333;background:rgba(0,0,0,.75);color:#fff;font-size:12px;cursor:pointer}
+.pr-skip:disabled{opacity:.6;cursor:default}
+
 /* player overlay ad */
 .playerbox{position:relative}
 .poverlay{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;
@@ -2267,7 +2277,7 @@ function render(){
 function afterRender(page){
   if(page==='home') initHero();
   if(page==='browse') initBrowse();
-  if(page==='watch') initPlayer();
+  if(page==='watch'){ initPlayer(); setupPreroll(); }
   if(page==='admin') initAdmin();
   updateArrows();
 }
@@ -2736,6 +2746,95 @@ function mountVignette(){
   s.dataset.zone = '12184154';
   s.src = 'https://n6wxm.com/vignette.min.js';
   document.body.appendChild(s);
+}
+
+/* ---------- VAST pre-roll (only for direct .mp4 episodes) ---------- */
+const VAST_TAG = 'https://youradexchange.com/video/select.php?r=12400306';
+let prerollAt = 0;
+
+function parseVast(xmlText){
+  try{
+    const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+    const media = Array.prototype.slice.call(doc.querySelectorAll('MediaFile'))
+      .map(function(n){
+        return { url:(n.textContent||'').trim(), type:n.getAttribute('type')||'', h:+(n.getAttribute('height')||0) };
+      })
+      .filter(function(m){ return m.url && (m.type.indexOf('mp4') >= 0 || /\.mp4(\?|$)/i.test(m.url)); })
+      .sort(function(a,b){ return (b.h||0)-(a.h||0); });
+    if(!media.length) return null;
+    const imp = doc.querySelector('Impression');
+    const click = doc.querySelector('ClickThrough');
+    const linear = doc.querySelector('Linear');
+    return {
+      file: media[0].url,
+      impression: imp ? imp.textContent.trim() : '',
+      click: click ? click.textContent.trim() : '',
+      skip: linear ? (linear.getAttribute('skipoffset') || '00:00:05') : '00:00:05'
+    };
+  }catch(e){ return null; }
+}
+
+function skipSeconds(v){
+  const p = String(v||'').split(':');
+  if(p.length === 3) return (+p[0])*3600 + (+p[1])*60 + (+p[2]);
+  if(p.length === 2) return (+p[0])*60 + (+p[1]);
+  return 5;
+}
+
+function setupPreroll(){
+  const player = document.getElementById('player');
+  const vid = document.getElementById('vid');
+  if(!player || !vid) return;                       /* embeds: nothing we can do */
+  const now = Date.now();
+  if(now - prerollAt < 5 * 60 * 1000) return;        /* max one pre-roll per 5 minutes */
+  prerollAt = now;
+
+  fetch(VAST_TAG, { cache:'no-store' })
+    .then(function(r){ return r.ok ? r.text() : ''; })
+    .then(function(txt){
+      const vast = txt ? parseVast(txt) : null;
+      if(vast) showPreroll(player, vid, vast);
+    })
+    .catch(function(){ /* CORS / network: skip silently */ });
+}
+
+function showPreroll(player, vid, vast){
+  const wrap = document.createElement('div');
+  wrap.className = 'preroll';
+  wrap.innerHTML = '<div class="pr-ads">Advertisement</div>'
+    + '<video class="pr-vid" playsinline autoplay></video>'
+    + '<button class="pr-skip" disabled>Skip in 5</button>';
+  player.appendChild(wrap);
+
+  const av = wrap.querySelector('.pr-vid');
+  const skipBtn = wrap.querySelector('.pr-skip');
+  av.src = vast.file;
+  if(vast.impression){ const px = new Image(); px.src = vast.impression; }
+  const p = av.play();
+  if(p && p.catch) p.catch(function(){});
+
+  let left = Math.max(1, Math.round(skipSeconds(vast.skip)));
+  skipBtn.textContent = 'Skip in ' + left;
+  const timer = setInterval(function(){
+    left--;
+    if(left <= 0){
+      clearInterval(timer);
+      skipBtn.disabled = false;
+      skipBtn.textContent = 'Skip Ad';
+    } else {
+      skipBtn.textContent = 'Skip in ' + left;
+    }
+  }, 1000);
+
+  function end(){
+    clearInterval(timer);
+    if(wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    try{ vid.play(); }catch(e){}
+  }
+  skipBtn.onclick = end;
+  av.onended = end;
+  av.onerror = end;
+  av.onclick = function(){ if(vast.click) window.open(vast.click, '_blank', 'noopener'); };
 }
 
 /* ---------- entry point, called after every render ---------- */
