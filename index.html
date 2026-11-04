@@ -634,6 +634,15 @@ select:hover{border-color:#3c3c4e}
   padding:4px 0;background:rgba(8,8,11,.94);border-top:1px solid var(--line)}
 @media(max-width:820px){.adsticky{display:flex}}
 
+/* full screen ad */
+.fullad{position:fixed;inset:0;z-index:9999;background:rgba(4,4,7,.97);display:flex;
+  align-items:center;justify-content:center;padding:20px}
+.fa-box{position:relative;display:flex;flex-direction:column;align-items:center;gap:16px;max-width:420px;width:100%}
+.fa-label{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#8b8b9b}
+.fa-skip{padding:11px 26px;border-radius:9px;border:1px solid #333;background:#16161f;color:#fff;
+  font-size:13px;font-weight:600;cursor:pointer}
+.fa-skip:disabled{opacity:.55;cursor:default}
+
 /* VAST pre-roll */
 .player{position:relative}
 .preroll{position:absolute;inset:0;z-index:9;background:#000;display:flex;align-items:center;justify-content:center}
@@ -2737,8 +2746,8 @@ function runAdcash(){
 
 /* ---------- Monetag vignette on the watch page (throttled) ---------- */
 const VIGNETTE = { at: 0 };
-function mountVignette(){
-  if(location.hash.indexOf('#/watch') !== 0) return;
+function mountVignette(force){
+  if(!force && location.hash.indexOf('#/watch') !== 0) return;
   const now = Date.now();
   if(now - VIGNETTE.at < 3 * 60 * 1000) return;
   VIGNETTE.at = now;
@@ -2749,7 +2758,7 @@ function mountVignette(){
 }
 
 /* ---------- VAST pre-roll (only for direct .mp4 episodes) ---------- */
-const VAST_TAG = 'https://youradexchange.com/video/select.php?r=12400306';
+const VAST_TAG = '/.netlify/functions/vast';
 let prerollAt = 0;
 
 function parseVast(xmlText){
@@ -2848,6 +2857,68 @@ function showPreroll(player, vast){
   av.onerror = end;
   av.onclick = function(){ if(vast.click) window.open(vast.click, '_blank', 'noopener'); };
 }
+
+/* ---------- full screen ad when opening a playlist or episode ---------- */
+let fullAdOpen = false;
+
+function showFullAd(target, done){
+  if(fullAdOpen){ done(); return; }
+  fullAdOpen = true;
+
+  const ov = document.createElement('div');
+  ov.className = 'fullad';
+  ov.innerHTML = '<div class="fa-box">'
+    + '<span class="fa-label">Advertisement</span>'
+    + '<div class="adwrap" id="faAd" data-ad="square"></div>'
+    + '<button class="fa-skip" id="faSkip" disabled>Continue in 5</button>'
+    + '</div>';
+  document.body.appendChild(ov);
+
+  const slot = document.getElementById('faAd');
+  if(slot) buildAd(slot);
+  mountVignette(true);
+
+  const btn = document.getElementById('faSkip');
+  let left = 5;
+  btn.textContent = 'Continue in ' + left;
+  const timer = setInterval(function(){
+    left--;
+    if(left <= 0){
+      clearInterval(timer);
+      btn.disabled = false;
+      btn.textContent = 'Continue';
+    } else {
+      btn.textContent = 'Continue in ' + left;
+    }
+  }, 1000);
+
+  function finish(){
+    clearInterval(timer);
+    if(ov.parentNode) ov.parentNode.removeChild(ov);
+    fullAdOpen = false;
+    done();
+  }
+  btn.onclick = finish;
+  setTimeout(finish, 9000);
+}
+
+/* intercept navigation into a playlist or an episode */
+document.addEventListener('click', function(ev){
+  const el = ev.target && ev.target.closest ? ev.target.closest('[data-go]') : null;
+  if(!el) return;
+  const target = el.getAttribute('data-go');
+  if(!target) return;
+  if(target.indexOf('#/detail') !== 0 && target.indexOf('#/watch') !== 0) return;
+  if(fullAdOpen) return;
+
+  ev.preventDefault();
+  ev.stopPropagation();
+  try{
+    showFullAd(target, function(){ location.hash = target; });
+  }catch(e){
+    location.hash = target;
+  }
+}, true);
 
 /* ---------- entry point, called after every render ---------- */
 function mountAds(){
