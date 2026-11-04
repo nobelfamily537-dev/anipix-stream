@@ -1,9 +1,5 @@
 [build]
   publish = "."
-  # Skip the build entirely when a commit only touches library.json.
-  # Publishing content therefore costs no Netlify build credits —
-  # the site and the app both read library.json from GitHub at runtime.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':!library.json'"
 
 [functions]
   directory = "netlify/functions"
