@@ -18,7 +18,7 @@ import android.widget.ProgressBar;
 
 public class MainActivity extends Activity {
 
-    private static final String HOME_URL = "https://anipix-stream.netlify.app/";
+    private static final String HOME_URL = "https://anipix-stream.animeloverclipedits.workers.dev/";
 
     private WebView web;
     private ProgressBar progress;
@@ -99,7 +99,8 @@ public class MainActivity extends Activity {
             String host = Uri.parse(url).getHost();
             if (host == null) return false;
             // main site and its assets stay in-app
-            if (host.endsWith("netlify.app")
+            if (host.endsWith("workers.dev")
+                    || host.endsWith("netlify.app")
                     || host.endsWith("githubusercontent.com")
                     || host.endsWith("github.com")
                     || host.endsWith("5gvci.com")

@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'models.dart';
 
 /// Where the published library lives. Change this if the site moves.
-const String kBaseUrl = 'https://anipix-stream.netlify.app';
+const String kBaseUrl = 'https://anipix-stream.animeloverclipedits.workers.dev';
 
 /// Content lives in the GitHub repo — this is the source of truth.
 const String kGitHubRaw =
