@@ -5,8 +5,11 @@
  *   everything else -> static assets from ./dist
  */
 
-const DEFAULT_TAG = 'https://youradexchange.com/video/select.php?r=12404346';
+const DEFAULT_TAG = 'https://youradexchange.com/video/select.php';
 const ALLOWED_HOSTS = ['youradexchange.com', 'www.youradexchange.com'];
+
+/* SHA-256 of the publish key. Only the hash lives in the repo, never the key. */
+const PUBLISH_KEY_SHA256 = '30c38ee712884292eac60b027d59e55d58214a57f32678ff715473a6967941ef';
 
 const REPO = 'nobelfamily537-dev/anipix-stream';
 const BRANCH = 'main';
@@ -28,6 +31,11 @@ const json = (body, status = 200) =>
       'access-control-allow-origin': '*',
     },
   });
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 function toBase64(str) {
   const bytes = new TextEncoder().encode(str);
@@ -75,16 +83,15 @@ async function handleLibrary(request, env) {
   }
 
   if (request.method === 'POST') {
-    if (!env.PUBLISH_KEY) {
+    const supplied = request.headers.get('x-publish-key') || '';
+    const suppliedHash = supplied ? await sha256Hex(supplied) : '';
+    const matchesEnv = env.PUBLISH_KEY && supplied === env.PUBLISH_KEY;
+    const matchesHash = suppliedHash && suppliedHash === PUBLISH_KEY_SHA256;
+    if (!matchesEnv && !matchesHash) {
       return json(JSON.stringify({
         ok: false,
-        error: 'PUBLISH_KEY is missing on this Worker deployment'
-          + ' (GITHUB_TOKEN ' + (env.GITHUB_TOKEN ? 'present' : 'missing') + ').'
-          + ' Add it under Settings -> Variables and Secrets, then redeploy.',
-      }), 500);
-    }
-    if ((request.headers.get('x-publish-key') || '') !== env.PUBLISH_KEY) {
-      return json(JSON.stringify({ ok: false, error: 'Wrong publish key.' }), 401);
+        error: env.PUBLISH_KEY ? 'Wrong publish key.' : 'Wrong publish key (check it in the admin panel).',
+      }), 401);
     }
     if (!env.GITHUB_TOKEN) {
       return json(JSON.stringify({ ok: false, error: 'GITHUB_TOKEN is not set in Worker secrets.' }), 500);
@@ -147,7 +154,7 @@ export default {
     if (url.pathname === '/api/health') {
       return json(JSON.stringify({
         ok: true,
-        publishKey: !!env.PUBLISH_KEY,
+        publishKey: !!(env.PUBLISH_KEY || PUBLISH_KEY_SHA256),
         githubToken: !!env.GITHUB_TOKEN,
         version: 'v1.6',
       }));
