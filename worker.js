@@ -76,7 +76,12 @@ async function handleLibrary(request, env) {
 
   if (request.method === 'POST') {
     if (!env.PUBLISH_KEY) {
-      return json(JSON.stringify({ ok: false, error: 'PUBLISH_KEY is not set in Worker variables.' }), 500);
+      return json(JSON.stringify({
+        ok: false,
+        error: 'PUBLISH_KEY is missing on this Worker deployment'
+          + ' (GITHUB_TOKEN ' + (env.GITHUB_TOKEN ? 'present' : 'missing') + ').'
+          + ' Add it under Settings -> Variables and Secrets, then redeploy.',
+      }), 500);
     }
     if ((request.headers.get('x-publish-key') || '') !== env.PUBLISH_KEY) {
       return json(JSON.stringify({ ok: false, error: 'Wrong publish key.' }), 401);
@@ -139,6 +144,14 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if (url.pathname === '/api/health') {
+      return json(JSON.stringify({
+        ok: true,
+        publishKey: !!env.PUBLISH_KEY,
+        githubToken: !!env.GITHUB_TOKEN,
+        version: 'v1.6',
+      }));
+    }
     if (url.pathname === '/api/vast') return handleVast(request);
     if (url.pathname === '/api/library') return handleLibrary(request, env);
 

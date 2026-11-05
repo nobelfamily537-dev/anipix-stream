@@ -1911,7 +1911,10 @@ function playerHTML(a, e, cur){
   }
   if(src.kind === 'embed'){
     const eqs = (e.sources || []).filter(x=>x.kind==='embed');
-    const startIdx = Math.max(0, eqs.findIndex(x=>x.url === src.url));
+    /* start on 480p if the admin uploaded it, otherwise the first source */
+    let startIdx = eqs.findIndex(x=>String(x.q||'').indexOf('480') === 0);
+    if(startIdx < 0) startIdx = Math.max(0, eqs.findIndex(x=>x.url === src.url));
+    const startSrc = eqs[startIdx] || src;
     const bar = eqs.length > 1 ? `<div class="qbar">
       <span class="qlabel">Quality</span>
       ${eqs.map((x,i)=>`<button class="qbtn ${i===startIdx?'on':''}" data-embed-q="${i}">${esc(x.q||('Source '+(i+1)))}</button>`).join('')}
@@ -1919,17 +1922,20 @@ function playerHTML(a, e, cur){
     return `${bar}<div class="player has-src" id="player">
       <div class="pl-badge">${esc(a.title.toUpperCase())} · S${e.season} E${e.n}</div>
       <div class="src-chip">EMBED</div>
-      <iframe id="embedFrame" class="realvid" data-src="${esc(src.url)}" title="${esc(a.title)} episode ${cur}"
+      <iframe id="embedFrame" class="realvid" data-src="${esc(startSrc.url)}" title="${esc(a.title)} episode ${cur}"
         allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin"></iframe>
     </div>`;
   }
   const qs = (e.sources || []).filter(x=>x.kind==='file');
+  let fileIdx = qs.findIndex(x=>String(x.q||'').indexOf('480') === 0);
+  if(fileIdx < 0) fileIdx = 0;
+  const startFile = qs[fileIdx] || src;
   const qualBtn = qs.length > 1
-    ? `<button class="vpill" id="vQualBtn">${esc(src.q||'HD')}</button>
-       <div class="vmenu" id="vQualMenu">${qs.map((x,i)=>`<button data-i="${i}" class="${i===0?'on':''}">${esc(x.q||('Source '+(i+1)))}</button>`).join('')}</div>`
+    ? `<button class="vpill" id="vQualBtn">${esc(startFile.q||'HD')}</button>
+       <div class="vmenu" id="vQualMenu">${qs.map((x,i)=>`<button data-i="${i}" class="${i===fileIdx?'on':''}">${esc(x.q||('Source '+(i+1)))}</button>`).join('')}</div>`
     : '';
   return `<div class="player has-src" id="player">
-    <video id="vid" class="realvid" src="${esc(src.url)}" poster="${e.thumb}" playsinline preload="metadata"></video>
+    <video id="vid" class="realvid" src="${esc(startFile.url)}" poster="${e.thumb}" playsinline preload="metadata"></video>
     <div class="vctl show" id="vctl">
       <button class="vbig" id="vBig">${I.play}</button>
       <div class="vbot">

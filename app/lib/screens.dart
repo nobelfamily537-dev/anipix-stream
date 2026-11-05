@@ -1027,9 +1027,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Episode get _episode => widget.episodes[_index];
   EpSource? get _source => _episode.sources.isEmpty ? null : _episode.sources[_sourceIndex];
 
+  /// 480p first (when the admin uploaded it), otherwise the first source.
+  int _defaultSourceIndex(Episode e) {
+    final i = e.sources.indexWhere((s) => s.q.startsWith('480'));
+    return i >= 0 ? i : 0;
+  }
+
   @override
   void initState() {
     super.initState();
+    _sourceIndex = _defaultSourceIndex(_episode);
     Store.i.pushHistory(widget.playlist.id, _episode.season, _episode.n);
     /* rewarded video on every episode open; fall back to an interstitial
        when Start.io has no rewarded fill for this user */
@@ -1085,7 +1092,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (i < 0 || i >= widget.episodes.length) return;
     setState(() {
       _index = i;
-      _sourceIndex = 0;
+      _sourceIndex = _defaultSourceIndex(_episode);
     });
     Store.i.pushHistory(widget.playlist.id, _episode.season, _episode.n);
     _setup();
