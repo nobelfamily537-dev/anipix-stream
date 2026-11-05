@@ -1,6 +1,7 @@
 package com.anipixstream.anipix_stream;
 
 import android.content.Context;
+import android.os.Bundle;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -8,6 +9,7 @@ import androidx.annotation.NonNull;
 import com.startapp.sdk.ads.banner.Banner;
 import com.startapp.sdk.adsbase.Ad;
 import com.startapp.sdk.adsbase.StartAppAd;
+import com.startapp.sdk.adsbase.StartAppSDK;
 import com.startapp.sdk.adsbase.adlisteners.AdEventListener;
 
 import io.flutter.embedding.android.FlutterActivity;
@@ -26,6 +28,16 @@ import io.flutter.plugin.platform.PlatformViewFactory;
 public class MainActivity extends FlutterActivity {
 
     private static final String CHANNEL = "anipix/ads";
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        /* Skip Start.io's GDPR consent popup: we report consent ourselves. */
+        try {
+            StartAppSDK.setUserConsent(this, "pas", System.currentTimeMillis(), true);
+        } catch (Throwable ignored) {
+        }
+        super.onCreate(savedInstanceState);
+    }
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine engine) {

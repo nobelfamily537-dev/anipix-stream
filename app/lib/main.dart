@@ -44,8 +44,10 @@ class _AniPixAppState extends State<AniPixApp> {
   }
 
   Future<void> _checkUpdate() async {
-    final info = await checkForUpdate();
+    final info = await UpdateService.check();
     if (info == null || !mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
     final ctx = _navKey.currentContext;
     if (ctx != null) showUpdateDialog(ctx, info);
   }

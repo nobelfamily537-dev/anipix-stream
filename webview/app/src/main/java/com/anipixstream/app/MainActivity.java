@@ -18,6 +18,7 @@ import android.widget.ProgressBar;
 
 import com.startapp.sdk.adsbase.Ad;
 import com.startapp.sdk.adsbase.StartAppAd;
+import com.startapp.sdk.adsbase.StartAppSDK;
 import com.startapp.sdk.adsbase.adlisteners.AdEventListener;
 
 import android.webkit.JavascriptInterface;
@@ -31,6 +32,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        try {
+            StartAppSDK.setUserConsent(this, "pas", System.currentTimeMillis(), true);
+        } catch (Throwable ignored) {
+        }
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 

@@ -8,6 +8,7 @@ import 'api.dart';
 import 'models.dart';
 import 'scope.dart';
 import 'store.dart';
+import 'update.dart';
 import 'ui.dart';
 
 /* ------------------------------------------------------------------ home */
@@ -21,7 +22,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 3; // Anime
+  UpdateInfo? _update;
   static const List<String> _tabs = ['All', 'Trending', 'Movie', 'Anime', 'TV', 'Kids'];
+
+  @override
+  void initState() {
+    super.initState();
+    UpdateService.check().then((info) {
+      if (mounted && info != null) setState(() => _update = info);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
+        if (_update != null) UpdateBanner(info: _update!),
         const SizedBox(height: 10),
         _HeroCard(playlist: hero, library: lib),
 
