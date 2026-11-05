@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'models.dart';
 
-const Color kBg = Color(0xFF08080B);
-const Color kSurface = Color(0xFF12121A);
-const Color kSurface2 = Color(0xFF1A1A24);
-const Color kLine = Color(0xFF272733);
-const Color kBrand = Color(0xFFF47521);
-const Color kText = Color(0xFFF3F3F7);
-const Color kMuted = Color(0xFF9A9AAB);
+const Color kBg = Color(0xFF0A0D10);
+const Color kSurface = Color(0xFF141A1F);
+const Color kSurface2 = Color(0xFF1C2329);
+const Color kLine = Color(0xFF2A3238);
+const Color kBrand = Color(0xFF2BD97C);   // MovieBox-style teal
+const Color kText = Color(0xFFFFFFFF);
+const Color kMuted = Color(0xFF8B949E);
 
 ThemeData buildTheme() {
   final base = ThemeData.dark(useMaterial3: true);
@@ -92,6 +92,51 @@ class AppImage extends StatelessWidget {
   }
 }
 
+class HindiBadge extends StatelessWidget {
+  final String label;
+  const HindiBadge({super.key, this.label = 'Hindi'});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xE60A0D10),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(label,
+          style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white)),
+    );
+  }
+}
+
+class CategoryChip extends StatelessWidget {
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+  const CategoryChip({super.key, required this.label, required this.on, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: on ? kBrand : kSurface2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: on ? kBrand : kLine),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: on ? Colors.black : kText)),
+      ),
+    );
+  }
+}
+
 class PosterCard extends StatelessWidget {
   final Playlist playlist;
   final VoidCallback onTap;
@@ -117,16 +162,12 @@ class PosterCard extends StatelessWidget {
                   children: [
                     AppImage(src: playlist.thumb),
                     Positioned(
-                      left: 6,
+                      right: 6,
                       top: 6,
-                      child: _Chip(text: playlist.dubLabel, filled: playlist.dub != 'sub'),
-                    ),
-                    if (playlist.rating > 0)
-                      Positioned(
-                        right: 6,
-                        top: 6,
-                        child: _Chip(text: '★ ${playlist.rating.toStringAsFixed(1)}'),
+                      child: HindiBadge(
+                        label: playlist.audio.isNotEmpty ? playlist.audio.first : playlist.dubLabel,
                       ),
+                    ),
                   ],
                 ),
               ),

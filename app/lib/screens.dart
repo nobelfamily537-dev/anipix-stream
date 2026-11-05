@@ -12,8 +12,16 @@ import 'ui.dart';
 
 /* ------------------------------------------------------------------ home */
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _tab = 3; // Anime
+  static const List<String> _tabs = ['All', 'Trending', 'Movie', 'Anime', 'TV', 'Kids'];
 
   @override
   Widget build(BuildContext context) {
@@ -21,76 +29,148 @@ class HomeScreen extends StatelessWidget {
     final lib = scope.library;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AniPix Stream'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => scope.reload(),
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         color: kBrand,
         backgroundColor: kSurface,
         onRefresh: scope.reload,
-        child: _buildBody(context, scope, lib),
+        child: _body(context, scope, lib),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context, LibScope scope, Library? lib) {
+  Widget _body(BuildContext context, LibScope scope, Library? lib) {
     if (scope.loading && lib == null) {
       return const Center(child: CircularProgressIndicator(color: kBrand));
     }
     if (lib == null) {
-      return ListView(
-        children: [
-          const SizedBox(height: 120),
-          EmptyState(
-            icon: Icons.cloud_off,
-            title: 'Could not load the library',
-            message: scope.error ?? 'Check your internet connection and try again.',
-            action: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kBrand, foregroundColor: Colors.white),
-              onPressed: () => scope.reload(),
-              child: const Text('Retry'),
-            ),
+      return ListView(children: [
+        const SizedBox(height: 120),
+        EmptyState(
+          icon: Icons.cloud_off,
+          title: 'Could not load the library',
+          message: scope.error ?? 'Check your internet connection and try again.',
+          action: ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kBrand, foregroundColor: Colors.black),
+            onPressed: () => scope.reload(),
+            child: const Text('Retry'),
           ),
-        ],
-      );
+        ),
+      ]);
     }
     if (lib.playlists.isEmpty) {
-      return ListView(
-        children: const [
-          SizedBox(height: 120),
-          EmptyState(
-            icon: Icons.movie_filter_outlined,
-            title: 'Nothing here yet',
-            message: 'Playlists added on the website will appear here automatically.',
-          ),
-        ],
-      );
+      return ListView(children: const [
+        SizedBox(height: 120),
+        EmptyState(
+          icon: Icons.movie_filter_outlined,
+          title: 'Nothing here yet',
+          message: 'Playlists added on the website appear here automatically.',
+        ),
+      ]);
     }
 
     final featured = lib.playlists.where((p) => p.featured).toList();
     final hero = featured.isNotEmpty ? featured.first : lib.playlists.first;
     final recent = List<Playlist>.from(lib.playlists.reversed);
-    final top = List<Playlist>.from(lib.playlists)
-      ..sort((a, b) => b.rating.compareTo(a.rating));
+    final top = List<Playlist>.from(lib.playlists)..sort((a, b) => b.rating.compareTo(a.rating));
 
     return ListView(
+      padding: EdgeInsets.zero,
       children: [
-        _HeroBanner(playlist: hero, library: lib),
-        if (recent.isNotEmpty) ...[
-          const SectionTitle('Recently added'),
-          _Row(items: recent, library: lib),
-        ],
-        if (top.isNotEmpty) ...[
-          const SectionTitle('Top rated'),
-          _Row(items: top, library: lib),
-        ],
-        const SizedBox(height: 12),
+        /* search + tabs */
+        SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: IgnorePointer(
+                        child: TextField(
+                          enabled: false,
+                          style: TextStyle(fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: 'Search anime, movies…',
+                            prefixIcon: Icon(Icons.search, size: 19, color: kMuted),
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      icon: const Icon(Icons.menu, color: kText),
+                      onPressed: () {},
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 34,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  itemCount: _tabs.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 18),
+                  itemBuilder: (context, i) {
+                    final on = i == _tab;
+                    return GestureDetector(
+                      onTap: () => setState(() => _tab = i),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_tabs[i],
+                              style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                                  color: on ? kText : kMuted)),
+                          const SizedBox(height: 5),
+                          Container(
+                            height: 2.5,
+                            width: 18,
+                            decoration: BoxDecoration(
+                              color: on ? kBrand : Colors.transparent,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+        _HeroCard(playlist: hero, library: lib),
+
+        /* categories */
+        const SectionTitle('Categories'),
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            children: const [
+              _CountryTile('All', Color(0xFF2BD97C)),
+              _CountryTile('Japan', Color(0xFF2B4C7E)),
+              _CountryTile('India', Color(0xFF7E4A2B)),
+              _CountryTile('China', Color(0xFF5E2B7E)),
+              _CountryTile('Korea', Color(0xFF2B7E6E)),
+            ],
+          ),
+        ),
+
+        SectionTitle('Trending Now 🔥', trailing: _SeeAll()),
+        _Row(items: recent, library: lib),
+
+        SectionTitle('Top rated ⚡', trailing: _SeeAll()),
+        _Row(items: top, library: lib),
+
+        const SizedBox(height: 10),
         const StartioBanner(),
         const SizedBox(height: 20),
       ],
@@ -98,101 +178,127 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class _HeroBanner extends StatelessWidget {
-  final Playlist playlist;
-  final Library library;
-  const _HeroBanner({required this.playlist, required this.library});
+class _SeeAll extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {},
+      child: const Row(children: [
+        Text('All', style: TextStyle(fontSize: 12, color: kMuted)),
+        Icon(Icons.chevron_right, size: 16, color: kMuted),
+      ]),
+    );
+  }
+}
+
+class _CountryTile extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _CountryTile(this.label, this.color);
 
   @override
   Widget build(BuildContext context) {
-    final img = playlist.banner.isNotEmpty
-        ? playlist.banner
-        : (playlist.thumb.isNotEmpty ? playlist.thumb : '');
-    final heroHeight = (MediaQuery.sizeOf(context).height * 0.44).clamp(260.0, 420.0);
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [color.withOpacity(0.55), kSurface2]),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+class _HeroCard extends StatelessWidget {
+  final Playlist playlist;
+  final Library library;
+  const _HeroCard({required this.playlist, required this.library});
+
+  @override
+  Widget build(BuildContext context) {
+    final img = playlist.banner.isNotEmpty ? playlist.banner : playlist.thumb;
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => PlaylistScreen(playlistId: playlist.id)),
       ),
-      child: Container(
-        height: heroHeight,
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: kSurface,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            AppImage(src: img, cacheWidth: 900, fallback: Container(color: kSurface2)),
-            const DecoratedBox(
+      child: Stack(
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 10,
+            child: AppImage(src: img, cacheWidth: 900, fallback: Container(color: kSurface2)),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Color(0xF208080B)],
+                  colors: [Colors.transparent, kBg.withOpacity(0.9)],
                 ),
               ),
             ),
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+          ),
+          Positioned(
+            left: 14,
+            right: 14,
+            bottom: 10,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: kSurface.withOpacity(0.92),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
                 children: [
-                  Text(playlist.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.15)),
-                  const SizedBox(height: 6),
-                  Text(
-                    [
-                      if (playlist.rating > 0) '★ ${playlist.rating.toStringAsFixed(1)}',
-                      playlist.dubLabel,
-                      if (playlist.year > 0) '${playlist.year}',
-                    ].join('  ·  '),
-                    style: const TextStyle(fontSize: 11.5, color: kMuted, fontWeight: FontWeight.w700),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: SizedBox(
+                      width: 44,
+                      height: 58,
+                      child: AppImage(src: playlist.thumb, cacheWidth: 200,
+                          fallback: Container(color: kSurface2)),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: kBrand,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(playlist.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 3),
+                        Text(
+                          [if (playlist.year > 0) '${playlist.year}', 'Anime'].join(' · '),
+                          style: const TextStyle(fontSize: 11, color: kMuted),
                         ),
-                        onPressed: () {
-                          final eps = library.episodesOf(playlist.id);
-                          if (eps.isEmpty) return;
-                          Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => PlayerScreen(playlist: playlist, episodes: eps, index: 0),
-                          ));
-                        },
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Play'),
-                      ),
-                      const SizedBox(width: 10),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: kText,
-                          side: const BorderSide(color: kLine),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => PlaylistScreen(playlistId: playlist.id)),
-                        ),
-                        child: const Text('Details'),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      final eps = library.episodesOf(playlist.id);
+                      if (eps.isEmpty) return;
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => PlayerScreen(playlist: playlist, episodes: eps, index: 0),
+                      ));
+                    },
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: const BoxDecoration(color: kBrand, shape: BoxShape.circle),
+                      child: const Icon(Icons.play_arrow, size: 20, color: Colors.black),
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -206,14 +312,15 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 236,
+      height: 226,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, i) => PosterCard(
           playlist: items[i],
+          width: 118,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => PlaylistScreen(playlistId: items[i].id)),
           ),
@@ -304,17 +411,15 @@ class PlaylistScreen extends StatefulWidget {
 }
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
-  @override
-  void initState() {
-    super.initState();
-    Ads.interstitial();            /* playlist opened */
-  }
-
   int? _season;
   String? _lang;
   int _tab = 0;
 
-  static const Color kTeal = Color(0xFF22C55E);
+  @override
+  void initState() {
+    super.initState();
+    Ads.interstitial(); /* playlist opened */
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -341,9 +446,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     return Scaffold(
       backgroundColor: kBg,
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: kBrand,
+        foregroundColor: Colors.black,
+        onPressed: () => _openDownloads(context, eps),
+        icon: const Icon(Icons.download, size: 18),
+        label: const Text('Download', style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
       body: CustomScrollView(
         slivers: [
-          /* ---------- banner ---------- */
+          /* ---------- player area ---------- */
           SliverToBoxAdapter(
             child: Stack(
               children: [
@@ -352,7 +464,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   child: AppImage(
                     src: playlist.banner.isNotEmpty ? playlist.banner : playlist.thumb,
                     cacheWidth: 900,
-                    fallback: Container(color: kSurface2),
+                    fallback: Container(color: Colors.black),
                   ),
                 ),
                 Positioned.fill(
@@ -361,7 +473,33 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.black.withOpacity(0.35), kBg],
+                        colors: [Colors.black.withOpacity(0.45), kBg],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (seasonEps.isEmpty) return;
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => PlayerScreen(
+                            playlist: playlist,
+                            episodes: eps,
+                            index: eps.indexOf(seasonEps.first),
+                          ),
+                        ));
+                      },
+                      child: Container(
+                        width: 58,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: const Icon(Icons.play_arrow, size: 32, color: Colors.white),
                       ),
                     ),
                   ),
@@ -376,44 +514,54 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ),
           ),
 
-          /* ---------- title + meta ---------- */
+          /* ---------- title + meta + actions ---------- */
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '${playlist.title} [${lang}]',
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.2),
-                  ),
-                  const SizedBox(height: 7),
                   Row(
                     children: [
-                      const Icon(Icons.star, size: 13, color: Color(0xFFF5C518)),
+                      Expanded(
+                        child: Text('${playlist.title} [$lang]',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, height: 1.2)),
+                      ),
+                      const Text('Info', style: TextStyle(fontSize: 12, color: kMuted)),
+                      const Icon(Icons.chevron_right, size: 16, color: kMuted),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.star, size: 12, color: Color(0xFFF5C518)),
                       const SizedBox(width: 4),
                       Text(playlist.rating.toStringAsFixed(1),
                           style: const TextStyle(fontSize: 11.5, color: kMuted, fontWeight: FontWeight.w700)),
                       const SizedBox(width: 10),
-                      Text(
-                        [
-                          if (playlist.year > 0) '${playlist.year}',
-                          'Anime',
-                          if (seasons.length > 1) '${seasons.length} seasons',
-                        ].join(' · '),
-                        style: const TextStyle(fontSize: 11.5, color: kMuted),
+                      Flexible(
+                        child: Text(
+                          [
+                            if (playlist.year > 0) '${playlist.year}',
+                            'Japan',
+                            'Anime',
+                            if (seasons.length > 1) '${seasons.length} seasons',
+                          ].join(' · '),
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11.5, color: kMuted),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 14),
-
-                  /* ---------- action chips ---------- */
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
                         _ActionChip(
-                          icon: inList ? Icons.check : Icons.add,
+                          icon: inList ? Icons.check : Icons.playlist_add,
                           label: inList ? 'In list' : 'Add to list',
                           onTap: () async {
                             await Store.i.toggleWatchlist(playlist.id);
@@ -422,7 +570,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         ),
                         const SizedBox(width: 8),
                         _ActionChip(
-                          icon: Icons.share_outlined,
+                          icon: Icons.ios_share,
                           label: 'Share',
                           onTap: () {
                             Clipboard.setData(ClipboardData(text: '$kBaseUrl/#/detail/${playlist.id}'));
@@ -435,40 +583,44 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         _ActionChip(
                           icon: Icons.download_outlined,
                           label: 'Download',
-                          onTap: () => _openDownloads(context, playlist, eps),
+                          onTap: () => _openDownloads(context, eps),
                         ),
                         const SizedBox(width: 8),
                         _ActionChip(
                           icon: Icons.video_library_outlined,
                           label: 'View downloads',
-                          onTap: () => _openDownloads(context, playlist, eps),
+                          onTap: () => _openDownloads(context, eps),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 20),
 
-                  /* ---------- resources ---------- */
-                  const Text('Resources',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
-                  const Text('Uploaded by AniPix',
-                      style: TextStyle(fontSize: 11, color: kMuted)),
-                  const SizedBox(height: 12),
+                  /* resources */
+                  Row(
+                    children: [
+                      const Text('Resources', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                      const SizedBox(width: 6),
+                      const Text('Uploaded by AniPix', style: TextStyle(fontSize: 11, color: kMuted)),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.help_outline, size: 13, color: kMuted),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       _DropChip(
-                        label: playlist.audio.length > 1 ? lang : '$lang dub',
+                        label: '${playlist.audio.length > 1 ? lang : '$lang dub'}',
                         onTap: () => _pickLang(context, playlist, lang),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       _DropChip(
                         label: 'Season ${active.toString().padLeft(2, '0')}',
                         onTap: () => _pickSeason(context, seasons, active),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                 ],
               ),
             ),
@@ -477,10 +629,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           /* ---------- episode chips ---------- */
           SliverToBoxAdapter(
             child: SizedBox(
-              height: 52,
+              height: 46,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 itemCount: seasonEps.length + 1,
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (context, i) {
@@ -498,11 +650,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       ));
                     },
                     child: Container(
-                      width: isAll ? 62 : 76,
+                      width: isAll ? 58 : 72,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: kSurface2,
-                        borderRadius: BorderRadius.circular(9),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: kLine),
                       ),
                       child: Text(
@@ -519,12 +671,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           /* ---------- tabs ---------- */
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+              padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
               child: Row(
                 children: [
                   _Tab(label: 'For you', on: _tab == 0, onTap: () => setState(() => _tab = 0)),
-                  const SizedBox(width: 22),
-                  _Tab(label: 'Episodes', on: _tab == 1, onTap: () => setState(() => _tab = 1)),
+                  const SizedBox(width: 20),
+                  _Tab(label: 'Comments', on: _tab == 1, onTap: () => setState(() => _tab = 1)),
                 ],
               ),
             ),
@@ -532,11 +684,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
           if (_tab == 0)
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 30),
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 90),
               sliver: others.isEmpty
                   ? const SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 30),
+                        padding: EdgeInsets.symmetric(vertical: 26),
                         child: Text('More anime will appear here.',
                             style: TextStyle(fontSize: 12.5, color: kMuted)),
                       ),
@@ -546,7 +698,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         crossAxisCount: 3,
                         mainAxisSpacing: 14,
                         crossAxisSpacing: 10,
-                        childAspectRatio: 0.48,
+                        childAspectRatio: 0.46,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, i) => PosterCard(
@@ -561,34 +713,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     ),
             )
           else
-            SliverList.builder(
-              itemCount: seasonEps.length,
-              itemBuilder: (context, i) {
-                final e = seasonEps[i];
-                return ListTile(
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => PlayerScreen(playlist: playlist, episodes: eps, index: eps.indexOf(e)),
-                  )),
-                  leading: Container(
-                    width: 34,
-                    height: 34,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: kSurface2,
-                      borderRadius: BorderRadius.circular(7),
-                      border: Border.all(color: kLine),
-                    ),
-                    child: Text('${e.n}',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
-                  ),
-                  title: Text(e.label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                  subtitle: Text(
-                    e.sources.isEmpty ? 'No video yet' : '${e.sources.length} source${e.sources.length == 1 ? '' : 's'}',
-                    style: const TextStyle(fontSize: 11, color: kMuted),
-                  ),
-                  trailing: const Icon(Icons.play_circle_outline, color: kMuted, size: 22),
-                );
-              },
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 90),
+                child: Text('Comments will open once the community feature is live.',
+                    style: const TextStyle(fontSize: 12.5, color: kMuted)),
+              ),
             ),
         ],
       ),
@@ -616,26 +746,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 runSpacing: 10,
                 children: [
                   for (final s in seasons)
-                    GestureDetector(
+                    _SheetTile(
+                      label: 'Season ${s.toString().padLeft(2, '0')}',
+                      on: s == active,
                       onTap: () {
                         setState(() => _season = s);
                         Navigator.of(context).pop();
                       },
-                      child: Container(
-                        width: 150,
-                        height: 46,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: s == active ? kBrand : kSurface2,
-                          borderRadius: BorderRadius.circular(9),
-                          border: Border.all(color: s == active ? kBrand : kLine),
-                        ),
-                        child: Text('Season ${s.toString().padLeft(2, '0')}',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: s == active ? Colors.white : kText)),
-                      ),
                     ),
                 ],
               ),
@@ -667,26 +784,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 runSpacing: 10,
                 children: [
                   for (final l in langs)
-                    GestureDetector(
+                    _SheetTile(
+                      label: '$l dub',
+                      on: l == active,
                       onTap: () {
                         setState(() => _lang = l);
                         Navigator.of(context).pop();
                       },
-                      child: Container(
-                        width: 150,
-                        height: 46,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: l == active ? kBrand : kSurface2,
-                          borderRadius: BorderRadius.circular(9),
-                          border: Border.all(color: l == active ? kBrand : kLine),
-                        ),
-                        child: Text('$l dub',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: l == active ? Colors.white : kText)),
-                      ),
                     ),
                 ],
               ),
@@ -697,7 +801,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     );
   }
 
-  void _openDownloads(BuildContext context, Playlist playlist, List<Episode> eps) {
+  void _openDownloads(BuildContext context, List<Episode> eps) {
     showModalBottomSheet(
       context: context,
       backgroundColor: kSurface,
@@ -729,12 +833,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         for (final e in withDownloads)
                           ListTile(
                             contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.check_circle, color: kBrand, size: 20),
                             title: Text('S${e.season} E${e.n}',
                                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                            subtitle: Text(
-                              e.downloads.map((d) => d.q).join(' · '),
-                              style: const TextStyle(fontSize: 11, color: kMuted),
-                            ),
+                            subtitle: Text(e.downloads.map((d) => d.q).join(' · '),
+                                style: const TextStyle(fontSize: 11, color: kMuted)),
                             trailing: const Icon(Icons.download, size: 18, color: kBrand),
                           ),
                       ],
@@ -745,6 +848,34 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _SheetTile extends StatelessWidget {
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+  const _SheetTile({required this.label, required this.on, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final w = (MediaQuery.sizeOf(context).width - 42) / 2;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: w,
+        height: 48,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on ? kBrand.withOpacity(0.18) : kSurface2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: on ? kBrand : kLine),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w700, color: on ? kBrand : kText)),
+      ),
     );
   }
 }
@@ -760,18 +891,18 @@ class _ActionChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: 13),
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: kSurface2,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: kLine),
         ),
         child: Row(
           children: [
             Icon(icon, size: 15, color: kText),
-            const SizedBox(width: 7),
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -789,18 +920,18 @@ class _DropChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 11),
         decoration: BoxDecoration(
           color: kSurface2,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(7),
           border: Border.all(color: kLine),
         ),
         child: Row(
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 6),
-            const Icon(Icons.keyboard_arrow_down, size: 16, color: kMuted),
+            Text(label, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 5),
+            const Icon(Icons.keyboard_arrow_down, size: 15, color: kMuted),
           ],
         ),
       ),
@@ -823,13 +954,11 @@ class _Tab extends StatelessWidget {
         children: [
           Text(label,
               style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w800,
-                  color: on ? kText : kMuted)),
+                  fontSize: 14, fontWeight: FontWeight.w800, color: on ? kText : kMuted)),
           const SizedBox(height: 5),
           Container(
             height: 2.5,
-            width: 26,
+            width: 24,
             decoration: BoxDecoration(
               color: on ? kBrand : Colors.transparent,
               borderRadius: BorderRadius.circular(2),
@@ -868,7 +997,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     Store.i.pushHistory(widget.playlist.id, _episode.season, _episode.n);
-    Ads.rewarded();                /* episode opened */
+    /* rewarded video on every episode open; fall back to an interstitial
+       when Start.io has no rewarded fill for this user */
+    Ads.rewarded().then((ok) {
+      if (!ok) Ads.interstitial();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _setup());
   }
 
