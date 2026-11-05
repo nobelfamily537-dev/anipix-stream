@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'ads.dart';
 import 'api.dart';
 import 'models.dart';
 import 'scope.dart';
@@ -89,7 +90,9 @@ class HomeScreen extends StatelessWidget {
           const SectionTitle('Top rated'),
           _Row(items: top, library: lib),
         ],
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
+        const StartioBanner(),
+        const SizedBox(height: 20),
       ],
     );
   }
@@ -301,6 +304,12 @@ class PlaylistScreen extends StatefulWidget {
 }
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Ads.interstitial();            /* playlist opened */
+  }
+
   int? _season;
   String? _lang;
   int _tab = 0;
@@ -859,6 +868,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     Store.i.pushHistory(widget.playlist.id, _episode.season, _episode.n);
+    Ads.rewarded();                /* episode opened */
     WidgetsBinding.instance.addPostFrameCallback((_) => _setup());
   }
 

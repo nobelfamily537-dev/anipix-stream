@@ -10,6 +10,9 @@ on:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - uses: actions/checkout@v4
 
@@ -33,17 +36,48 @@ jobs:
             cp app/assets/icon/mipmap-$d/ic_launcher.png app/android/app/src/main/res/mipmap-$d/ic_launcher.png
           done
 
-      - name: Add INTERNET permission
+      - name: Start.io + permissions config
         run: |
           python3 - <<'PY'
-          p = 'app/android/app/src/main/AndroidManifest.xml'
-          src = open(p).read()
-          if 'android.permission.INTERNET' not in src:
-              src = src.replace('<application',
-                                '<uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
-              open(p, 'w').write(src)
-          print('INTERNET permission present:', 'android.permission.INTERNET' in open(p).read())
+          import os, re
+
+          base = 'app/android/app'
+          gradle = os.path.join(base, 'build.gradle')
+          s = open(gradle).read()
+          s = re.sub(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 36', s)
+          s = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 23', s)
+          if 'inapp-sdk' not in s:
+              s = s.replace('dependencies {', "dependencies {\n    implementation 'com.startapp:inapp-sdk:5.4.0'", 1)
+          if 'sourceCompatibility' not in s:
+              s = s.replace('android {',
+                            "android {\n    compileOptions {\n"
+                            "        sourceCompatibility JavaVersion.VERSION_17\n"
+                            "        targetCompatibility JavaVersion.VERSION_17\n"
+                            "    }\n", 1)
+          open(gradle, 'w').write(s)
+          print('gradle patched')
+
+          mf = os.path.join(base, 'src/main/AndroidManifest.xml')
+          m = open(mf).read()
+          if 'android.permission.INTERNET' not in m:
+              m = re.sub(r'(<application[^>]*>)',
+                         r'<uses-permission android:name="android.permission.INTERNET"/>\n    \1', m, count=1)
+          if 'android.permission.AD_ID' not in m:
+              m = re.sub(r'(<application[^>]*>)',
+                         r'<uses-permission android:name="android.permission.AD_ID"/>\n    \1', m, count=1)
+          if 'com.startapp.sdk.APPLICATION_ID' not in m:
+              m = re.sub(r'(<application[^>]*>)',
+                         r'\1\n        <meta-data android:name="com.startapp.sdk.APPLICATION_ID" android:value="210377175" />',
+                         m, count=1)
+          open(mf, 'w').write(m)
+          print('manifest patched')
           PY
+
+          find app/android/app/src/main -name "MainActivity.kt" -delete
+          mkdir -p app/android/app/src/main/java/com/anipixstream/anipix_stream
+          cp app/android_extra/MainActivity.java app/android/app/src/main/java/com/anipixstream/anipix_stream/MainActivity.java
+          echo "--- manifest ---"
+          grep -E "INTERNET|AD_ID|startapp|android:label" app/android/app/src/main/AndroidManifest.xml || true
 
       - name: Use a stable signing key
         run: |

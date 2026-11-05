@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'ads.dart';
 import 'api.dart';
 import 'models.dart';
 import 'scope.dart';
@@ -36,6 +37,7 @@ class _AniPixAppState extends State<AniPixApp> {
     _load();
     Timer(const Duration(milliseconds: 1900), () {
       if (mounted) setState(() => _splash = false);
+      Ads.interstitial();          /* app open ad */
     });
   }
 
