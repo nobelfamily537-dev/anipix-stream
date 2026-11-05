@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.anipixstream.anipix_stream"
-        minSdk 21
+        minSdk 23
         targetSdk 34
         versionCode 7
         versionName "1.0.6"
