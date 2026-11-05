@@ -1,5 +1,5 @@
 {
-  "version": "1.5.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v1.5.0/app-release.apk",
-  "notes": "In-app update, same signing key as before"
+  "version": "1.6.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v1.6.0/app-release.apk",
+  "notes": "Admin console inside the app: add episodes and publish"
 }

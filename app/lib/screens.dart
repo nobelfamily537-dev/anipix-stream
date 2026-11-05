@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'ads.dart';
+import 'admin.dart';
 import 'api.dart';
 import 'models.dart';
 import 'scope.dart';
@@ -1649,6 +1650,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             trailing: const Icon(Icons.chevron_right, color: kMuted, size: 18),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SupportScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.admin_panel_settings_outlined, color: kMuted, size: 20),
+            title: const Text('Admin console', style: TextStyle(fontSize: 13.5)),
+            subtitle: const Text('Add episodes from the app', style: TextStyle(fontSize: 11, color: kMuted)),
+            trailing: const Icon(Icons.chevron_right, color: kMuted, size: 18),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminScreen()),
             ),
           ),
           const SizedBox(height: 18),

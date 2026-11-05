@@ -11,9 +11,12 @@ const String kGitHubRaw =
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '1.5.0';
+const String kAppVersion = '1.6.0';
 
 class Api {
+  /// The last library JSON as received — the admin screen publishes this back.
+  static Map<String, dynamic>? lastRaw;
+
   /// Reads the live library. Tries the Netlify function first (instant updates
   /// from the admin panel) and falls back to the static file in the repo.
   static Future<Library> fetchLibrary() async {
@@ -37,6 +40,7 @@ class Api {
           lastError = Exception('Unexpected library format');
           continue;
         }
+        lastRaw = decoded;
         final lib = Library.fromJson(decoded);
         if (lib.version == 0 && lib.playlists.isEmpty) {
           lastError = Exception('Library is empty');
