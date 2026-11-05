@@ -146,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(tabs[i]),
+                          Text(tabs[i],
                               style: TextStyle(
                                   fontSize: 13.5,
                                   fontWeight: on ? FontWeight.w800 : FontWeight.w600,
