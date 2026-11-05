@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
@@ -100,7 +101,21 @@ class UpdateService {
   }
 }
 
+const MethodChannel _installChannel = MethodChannel('anipix/ads');
+
+/// Downloads the APK inside the app and opens the system installer.
+Future<bool> installUpdate(UpdateInfo info) async {
+  try {
+    final ok = await _installChannel.invokeMethod<bool>('installApk', {'url': info.url});
+    return ok == true;
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<void> openUpdate(UpdateInfo info) async {
+  /* first try the in-app download + installer, fall back to the browser */
+  if (await installUpdate(info)) return;
   final uri = Uri.parse(info.url);
   if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
     await launchUrl(uri);

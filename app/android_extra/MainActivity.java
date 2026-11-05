@@ -1,7 +1,13 @@
 package com.anipixstream.anipix_stream;
 
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -49,6 +55,14 @@ public class MainActivity extends FlutterActivity {
                         showFullScreen(StartAppAd.AdMode.AUTOMATIC, result);
                     } else if ("rewarded".equals(call.method)) {
                         showFullScreen(StartAppAd.AdMode.REWARDED_VIDEO, result);
+                    } else if ("installApk".equals(call.method)) {
+                        final String url = call.argument("url");
+                        try {
+                            downloadAndInstall(url);
+                            result.success(true);
+                        } catch (Throwable t) {
+                            result.success(false);
+                        }
                     } else {
                         result.notImplemented();
                     }
@@ -81,6 +95,43 @@ public class MainActivity extends FlutterActivity {
         } catch (Throwable t) {
             result.success(false);
         }
+    }
+
+    /* ---------------- in-app update: download + install ---------------- */
+
+    private long pendingDownloadId = -1;
+
+    private void downloadAndInstall(final String url) {
+        final DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+        if (dm == null) throw new RuntimeException("no download manager");
+
+        DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
+        req.setTitle("AniPix Stream update");
+        req.setMimeType("application/vnd.android.package-archive");
+        req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+        req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "anipix-update.apk");
+
+        pendingDownloadId = dm.enqueue(req);
+
+        BroadcastReceiver receiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                if (id != pendingDownloadId) return;
+                try {
+                    unregisterReceiver(this);
+                } catch (Throwable ignored) {
+                }
+                Uri apk = dm.getUriForDownloadedFile(id);
+                if (apk == null) return;
+                Intent install = new Intent(Intent.ACTION_VIEW);
+                install.setDataAndType(apk, "application/vnd.android.package-archive");
+                install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(install);
+            }
+        };
+        registerReceiver(receiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
     }
 
     /* ---------------- banner ---------------- */

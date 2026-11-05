@@ -27,6 +27,21 @@ def patch_gradle():
     s = open(path).read()
 
     s = re.sub(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 36', s)
+
+    # sign with the repo keystore so updates install over previous builds
+    if 'anipixrelease' not in s:
+        s = s.replace('android {', '''android {
+    signingConfigs {
+        anipixrelease {
+            storeFile file(System.getenv("HOME") + "/.android/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+''', 1)
+        s = re.sub(r'signingConfig\s*=?\s*signingConfigs\.(getByName\("debug"\)|debug)',
+                   'signingConfig = signingConfigs.getByName("anipixrelease")', s)
     s = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 23', s)
     s = re.sub(r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 36', s)
     s = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 23', s)
@@ -66,6 +81,9 @@ def patch_manifest():
     if 'android.permission.AD_ID' not in m:
         m = re.sub(r'(<application[^>]*>)',
                    r'<uses-permission android:name="android.permission.AD_ID"/>\n    \1', m, count=1)
+    if 'REQUEST_INSTALL_PACKAGES' not in m:
+        m = re.sub(r'(<application[^>]*>)',
+                   r'<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>\n    \1', m, count=1)
     if 'com.startapp.sdk.APPLICATION_ID' not in m:
         m = re.sub(r'(<application[^>]*>)',
                    r'\1\n        <meta-data android:name="com.startapp.sdk.APPLICATION_ID" '
