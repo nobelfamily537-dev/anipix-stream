@@ -107,12 +107,63 @@ class Playlist {
   }
 }
 
+class HomeSection {
+  final String title;
+  final String source;
+  final int limit;
+  const HomeSection({required this.title, required this.source, required this.limit});
+
+  factory HomeSection.fromJson(Map<String, dynamic> j) => HomeSection(
+        title: (j['title'] ?? 'More').toString(),
+        source: (j['source'] ?? 'recent').toString(),
+        limit: (j['limit'] as num?)?.toInt() ?? 10,
+      );
+}
+
+class HomeLayout {
+  final List<String> tabs;
+  final List<String> categories;
+  final List<HomeSection> sections;
+
+  const HomeLayout({required this.tabs, required this.categories, required this.sections});
+
+  static const HomeLayout fallback = HomeLayout(
+    tabs: ['All', 'Trending', 'Movie', 'Anime', 'TV', 'Kids'],
+    categories: ['All', 'Japan', 'India', 'China', 'Korea'],
+    sections: [
+      HomeSection(title: 'Trending Now 🔥', source: 'recent', limit: 12),
+      HomeSection(title: 'Top rated ⚡', source: 'rating', limit: 12),
+    ],
+  );
+
+  factory HomeLayout.fromJson(Map<String, dynamic> j) {
+    final tabs = ((j['tabs'] as List?) ?? const []).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+    final cats = ((j['categories'] as List?) ?? const []).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+    final secs = ((j['sections'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => HomeSection.fromJson(Map<String, dynamic>.from(e)))
+        .where((e) => e.title.isNotEmpty)
+        .toList();
+    return HomeLayout(
+      tabs: tabs.isEmpty ? fallback.tabs : tabs,
+      categories: cats.isEmpty ? fallback.categories : cats,
+      sections: secs.isEmpty ? fallback.sections : secs,
+    );
+  }
+}
+
 class Library {
   final int version;
   final List<Playlist> playlists;
   final List<Episode> episodes;
+  final HomeLayout home;
 
-  const Library({required this.version, required this.playlists, required this.episodes});
+  const Library({
+    required this.version,
+    required this.playlists,
+    required this.episodes,
+    this.home = HomeLayout.fallback,
+  });
 
   factory Library.fromJson(Map<String, dynamic> j) => Library(
         version: (j['version'] as num?)?.toInt() ?? 0,
@@ -124,6 +175,9 @@ class Library {
             .whereType<Map>()
             .map((e) => Episode.fromJson(Map<String, dynamic>.from(e)))
             .toList(),
+        home: (j['home'] is Map)
+            ? HomeLayout.fromJson(Map<String, dynamic>.from(j['home'] as Map))
+            : HomeLayout.fallback,
       );
 
   List<Episode> episodesOf(String playlistId) {

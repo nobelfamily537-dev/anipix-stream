@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v1.3.0/app-release.apk",
-  "notes": "MovieBox-style UI, Start.io consent fix, update banner"
+  "version": "1.4.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v1.4.0/app-release.apk",
+  "notes": "Home layout controlled from the admin panel"
 }

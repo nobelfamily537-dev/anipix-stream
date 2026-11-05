@@ -11,7 +11,7 @@ const String kGitHubRaw =
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '1.3.0';
+const String kAppVersion = '1.4.0';
 
 class Api {
   /// Reads the live library. Tries the Netlify function first (instant updates

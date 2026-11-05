@@ -955,7 +955,15 @@ function sha256hex(str){
 const DEFAULT_DB = {
   users: [], session: null,
   playlists: [], episodes: [], seasons: [],
-  settings: { siteName:'AniPix Stream', tagline:'Anime, A to Z', allowSignup:true, heroEnabled:true }
+  settings: { siteName:'AniPix Stream', tagline:'Anime, A to Z', allowSignup:true, heroEnabled:true },
+  home: {
+    tabs: ['All','Trending','Movie','Anime','TV','Kids'],
+    categories: ['All','Japan','India','China','Korea'],
+    sections: [
+      {title:'Trending Now 🔥', source:'recent', limit:12},
+      {title:'Top rated ⚡', source:'rating', limit:12}
+    ]
+  }
 };
 let DB = JSON.parse(JSON.stringify(DEFAULT_DB));
 try{
@@ -964,6 +972,10 @@ try{
     const p = JSON.parse(raw);
     DB = Object.assign({}, DEFAULT_DB, p);
     DB.settings = Object.assign({}, DEFAULT_DB.settings, p.settings||{});
+    DB.home = Object.assign({}, DEFAULT_DB.home, p.home||{});
+    if(!Array.isArray(DB.home.sections) || !DB.home.sections.length) DB.home.sections = DEFAULT_DB.home.sections;
+    if(!Array.isArray(DB.home.tabs) || !DB.home.tabs.length) DB.home.tabs = DEFAULT_DB.home.tabs;
+    if(!Array.isArray(DB.home.categories) || !DB.home.categories.length) DB.home.categories = DEFAULT_DB.home.categories;
     DB.users = DB.users || [];
     DB.playlists = DB.playlists || [];
     DB.episodes = DB.episodes || [];
@@ -1375,6 +1387,19 @@ function pageAdmin(){
           <div class="full"><label class="switch"><input type="checkbox" id="setSignup" ${DB.settings.allowSignup?'checked':''}> Allow new sign-ups</label></div>
           <div class="full"><button class="btn primary sm" id="setSave">Save settings</button></div>
           <div class="full" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
+            <label>Home layout — app + website</label>
+            <p class="hint" style="margin:0 0 10px">Yeh rows app aur website dono par wahi dikhengi.</p>
+            <label>Tabs (comma separated)</label>
+            <input id="homeTabs" value="${esc((DB.home.tabs||[]).join(', '))}">
+            <label style="margin-top:10px">Categories (comma separated)</label>
+            <input id="homeCats" value="${esc((DB.home.categories||[]).join(', '))}">
+            <label style="margin-top:10px">Sections — one per line: Title | source | limit</label>
+            <textarea id="homeSections" rows="5" style="width:100%;font-family:ui-monospace,monospace;font-size:12px">${esc((DB.home.sections||[]).map(x=>x.title+' | '+x.source+' | '+(x.limit||10)).join('\n'))}</textarea>
+            <p class="hint" style="margin:6px 0 10px">source: <b>recent</b> · <b>rating</b> · <b>featured</b> · <b>continue</b> · <b>genre:Action</b></p>
+            <button class="btn primary sm" id="homeSave">Save layout</button>
+            <span id="homeInfo" class="testout" style="margin-left:10px"></span>
+          </div>
+          <div class="full" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
             <label>Publish library (for the live site)</label>
             <p class="hint" style="margin:0 0 10px">Aapki playlists is browser mein hain. Doosre visitors ko dikhane ke liye
               <b>library.json</b> export karo aur usko site folder mein daal ke dobara deploy karo.</p>
@@ -1684,7 +1709,7 @@ function initAdmin(){
   const ex = $('#exportBtn');
   if(ex) ex.onclick = ()=>{
     const payload = {version: Date.now(), site: DB.settings.siteName,
-      playlists: DB.playlists, episodes: DB.episodes, seasons: DB.seasons};
+      playlists: DB.playlists, episodes: DB.episodes, seasons: DB.seasons, home: DB.home};
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1696,11 +1721,30 @@ function initAdmin(){
     toast('library.json downloaded');
   };
 
+  const homeSave = $('#homeSave');
+  if(homeSave) homeSave.onclick = ()=>{
+    const tabs = ($('#homeTabs').value||'').split(',').map(x=>x.trim()).filter(Boolean);
+    const cats = ($('#homeCats').value||'').split(',').map(x=>x.trim()).filter(Boolean);
+    const secs = ($('#homeSections').value||'').split('\n').map(line=>{
+      const parts = line.split('|').map(x=>x.trim());
+      if(!parts[0]) return null;
+      return {title: parts[0], source: parts[1] || 'recent', limit: parseInt(parts[2],10) || 10};
+    }).filter(Boolean);
+    DB.home = {tabs: tabs.length?tabs:DEFAULT_DB.home.tabs,
+               categories: cats.length?cats:DEFAULT_DB.home.categories,
+               sections: secs.length?secs:DEFAULT_DB.home.sections};
+    saveDB();
+    const info = $('#homeInfo');
+    if(info){ info.className='testout ok'; info.textContent='Layout saved — Publish to apply'; }
+    toast('Home layout saved. Publish to push it live.');
+    render();
+  };
+
   const pub = $('#publishBtn');
   if(pub) pub.onclick = async ()=>{
     const info = $('#publishInfo');
     const payload = {version: Date.now(), site: DB.settings.siteName,
-      playlists: DB.playlists, episodes: DB.episodes, seasons: DB.seasons};
+      playlists: DB.playlists, episodes: DB.episodes, seasons: DB.seasons, home: DB.home};
     let key = '';
     try{ key = localStorage.getItem('anipix_publish_key') || ''; }catch(e){}
     if(!key){
@@ -1953,12 +1997,28 @@ function pageHome(){
   const featured = ANIME.filter(a=>a.featured);
   const heroItems = (featured.length ? featured : byRating).slice(0,5);
 
-  const rows = [
-    ['Continue watching', take([...ANIME].sort((a,b)=>(hash(b.id)%9)-(hash(a.id)%9)), 8), {progress:true, link:'#/watchlist'}],
-    ['Popular now', take(byRating, 10), {badge:'TRENDING', link:'#/browse'}],
-    ['Top picks', take([...byRating].reverse(), 10), {rank:true, link:'#/browse'}],
-    ['Recently added', take(byNew, 12), {link:'#/browse'}]
-  ].filter(r=>r[1].length);
+  const poolFor = (src)=>{
+    if(!src) return byNew;
+    if(src === 'rating') return byRating;
+    if(src === 'featured') return featured;
+    if(src === 'continue') return [...ANIME].sort((a,b)=>(hash(b.id)%9)-(hash(a.id)%9));
+    if(src === 'recent') return byNew;
+    if(src.indexOf('genre:') === 0){
+      const g = src.slice(6).toLowerCase();
+      return ANIME.filter(a=>a.genres.some(x=>String(x).toLowerCase()===g));
+    }
+    return byNew;
+  };
+  const layout = (DB.home && Array.isArray(DB.home.sections) && DB.home.sections.length)
+    ? DB.home.sections : DEFAULT_DB.home.sections;
+  const rows = layout
+    .map(sec=>({
+      title: sec.title || 'More',
+      items: take(poolFor(sec.source), Math.max(1, parseInt(sec.limit,10) || 10)),
+      opts: {link:'#/browse'}
+    }))
+    .filter(r=>r.items.length)
+    .map(r=>[r.title, r.items, r.opts]);
 
   return `
   ${DB.settings.heroEnabled ? heroHTML(heroItems) : ''}

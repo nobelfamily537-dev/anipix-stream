@@ -23,7 +23,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 3; // Anime
   UpdateInfo? _update;
-  static const List<String> _tabs = ['All', 'Trending', 'Movie', 'Anime', 'TV', 'Kids'];
 
   @override
   void initState() {
@@ -78,10 +77,27 @@ class _HomeScreenState extends State<HomeScreen> {
       ]);
     }
 
+    final layout = lib.home;
+    final tabs = layout.tabs;
+    final tabIndex = _tab < tabs.length ? _tab : 0;
+
     final featured = lib.playlists.where((p) => p.featured).toList();
     final hero = featured.isNotEmpty ? featured.first : lib.playlists.first;
     final recent = List<Playlist>.from(lib.playlists.reversed);
     final top = List<Playlist>.from(lib.playlists)..sort((a, b) => b.rating.compareTo(a.rating));
+
+    List<Playlist> poolFor(String source) {
+      if (source == 'rating') return top;
+      if (source == 'featured') return featured.isEmpty ? recent : featured;
+      if (source.startsWith('genre:')) {
+        final g = source.substring(6).toLowerCase();
+        final hit = lib.playlists
+            .where((p) => p.genres.any((x) => x.toLowerCase() == g))
+            .toList();
+        return hit.isEmpty ? recent : hit;
+      }
+      return recent;
+    }
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -121,16 +137,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
-                  itemCount: _tabs.length,
+                  itemCount: tabs.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 18),
                   itemBuilder: (context, i) {
-                    final on = i == _tab;
+                    final on = i == tabIndex;
                     return GestureDetector(
                       onTap: () => setState(() => _tab = i),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_tabs[i],
+                          Text(tabs[i]),
                               style: TextStyle(
                                   fontSize: 13.5,
                                   fontWeight: on ? FontWeight.w800 : FontWeight.w600,
@@ -162,24 +178,30 @@ class _HomeScreenState extends State<HomeScreen> {
         const SectionTitle('Categories'),
         SizedBox(
           height: 40,
-          child: ListView(
+          child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            children: const [
-              _CountryTile('All', Color(0xFF2BD97C)),
-              _CountryTile('Japan', Color(0xFF2B4C7E)),
-              _CountryTile('India', Color(0xFF7E4A2B)),
-              _CountryTile('China', Color(0xFF5E2B7E)),
-              _CountryTile('Korea', Color(0xFF2B7E6E)),
-            ],
+            itemCount: layout.categories.length,
+            itemBuilder: (context, i) {
+              const colors = [
+                Color(0xFF2BD97C), Color(0xFF2B4C7E), Color(0xFF7E4A2B),
+                Color(0xFF5E2B7E), Color(0xFF2B7E6E), Color(0xFF7E2B4A),
+              ];
+              return _CountryTile(layout.categories[i], colors[i % colors.length]);
+            },
           ),
         ),
 
-        SectionTitle('Trending Now 🔥', trailing: _SeeAll()),
-        _Row(items: recent, library: lib),
-
-        SectionTitle('Top rated ⚡', trailing: _SeeAll()),
-        _Row(items: top, library: lib),
+        /* admin-controlled rows */
+        ...layout.sections.expand((sec) {
+          final items = poolFor(sec.source);
+          if (items.isEmpty) return <Widget>[];
+          final take = items.length > sec.limit ? items.sublist(0, sec.limit) : items;
+          return <Widget>[
+            SectionTitle(sec.title, trailing: _SeeAll()),
+            _Row(items: take, library: lib),
+          ];
+        }),
 
         const SizedBox(height: 10),
         const StartioBanner(),
