@@ -16,6 +16,12 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
 
+import com.startapp.sdk.adsbase.Ad;
+import com.startapp.sdk.adsbase.StartAppAd;
+import com.startapp.sdk.adsbase.adlisteners.AdEventListener;
+
+import android.webkit.JavascriptInterface;
+
 public class MainActivity extends Activity {
 
     private static final String HOME_URL = "https://anipix-stream.animeloverclipedits.workers.dev/";
@@ -84,10 +90,58 @@ public class MainActivity extends Activity {
             }
         });
 
+        web.addJavascriptInterface(new AdsBridge(), "AnipixAds");
+
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState);
         } else {
             web.loadUrl(HOME_URL);
+        }
+    }
+
+    /* ------------------------------------------------------------------
+       Start.io interstitial — the page calls AnipixAds.showInterstitial()
+       when a playlist or an episode is tapped.
+       ------------------------------------------------------------------ */
+    private long lastInterstitialAt = 0;
+    private static final long INTERSTITIAL_GAP_MS = 45 * 1000L;
+
+    private class AdsBridge {
+        @JavascriptInterface
+        public void showInterstitial() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    maybeShowInterstitial();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String platform() {
+            return "android";
+        }
+    }
+
+    private void maybeShowInterstitial() {
+        long now = System.currentTimeMillis();
+        if (now - lastInterstitialAt < INTERSTITIAL_GAP_MS) return;
+        lastInterstitialAt = now;
+        try {
+            final StartAppAd ad = new StartAppAd(this);
+            ad.loadAd(StartAppAd.AdMode.AUTOMATIC, new AdEventListener() {
+                @Override
+                public void onReceiveAd(Ad received) {
+                    try { ad.showAd(); } catch (Throwable ignored) { }
+                }
+
+                @Override
+                public void onFailedToReceiveAd(Ad failed) {
+                    /* no fill — carry on */
+                }
+            });
+        } catch (Throwable ignored) {
+            /* SDK not ready */
         }
     }
 

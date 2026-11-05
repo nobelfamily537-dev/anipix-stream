@@ -3038,6 +3038,14 @@ document.addEventListener('click', function(ev){
 
   ev.preventDefault();
   ev.stopPropagation();
+
+  /* inside the Android app: ask the native Start.io SDK for an interstitial */
+  try{
+    if(window.AnipixAds && typeof window.AnipixAds.showInterstitial === 'function'){
+      window.AnipixAds.showInterstitial();
+    }
+  }catch(e){}
+
   try{
     showFullAd(target, function(){ location.hash = target; });
   }catch(e){
