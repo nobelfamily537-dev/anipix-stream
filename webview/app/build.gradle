@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace 'com.anipixstream.anipix_stream'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.anipixstream.anipix_stream"
@@ -42,5 +42,5 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.startapp:inapp-sdk:5.+'
+    implementation 'com.startapp:inapp-sdk:5.4.0'
 }
