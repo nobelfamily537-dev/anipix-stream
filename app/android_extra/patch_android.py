@@ -32,12 +32,14 @@ def patch_gradle():
     s = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 23', s)
 
     if 'inapp-sdk' not in s:
-        if path.endswith('.kts'):
-            s = s.replace('dependencies {',
-                          'dependencies {\n    implementation("com.startapp:inapp-sdk:%s")' % STARTAPP_SDK, 1)
+        dep = ('    implementation("com.startapp:inapp-sdk:%s")' % STARTAPP_SDK
+               if path.endswith('.kts')
+               else "    implementation 'com.startapp:inapp-sdk:%s'" % STARTAPP_SDK)
+        if re.search(r'dependencies\s*\{', s):
+            s = re.sub(r'dependencies\s*\{',
+                       lambda m: m.group(0) + '\n' + dep, s, count=1)
         else:
-            s = s.replace('dependencies {',
-                          "dependencies {\n    implementation 'com.startapp:inapp-sdk:%s'" % STARTAPP_SDK, 1)
+            s += '\ndependencies {\n' + dep + '\n}\n'
 
     if 'sourceCompatibility' not in s and not path.endswith('.kts'):
         s = s.replace('android {',
@@ -51,6 +53,7 @@ def patch_gradle():
     for line in s.splitlines():
         if 'compileSdk' in line or 'minSdk' in line or 'inapp-sdk' in line:
             print('   ', line.strip())
+    print('   dependencies block present:', 'dependencies' in s)
 
 
 def patch_manifest():
