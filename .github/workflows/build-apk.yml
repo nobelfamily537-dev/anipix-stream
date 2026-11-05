@@ -10,6 +10,8 @@ on:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -61,6 +63,22 @@ jobs:
 
       - name: Show sizes
         run: ls -lh app/build/app/outputs/flutter-apk/ || true
+
+      - name: Publish release (used by the in-app updater)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(grep '^version:' app/pubspec.yaml | sed 's/version: *//' | cut -d+ -f1)
+          echo "version: $VER"
+          if gh release view "v$VER" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "v$VER" app/build/app/outputs/flutter-apk/app-release.apk#AniPix-Stream.apk \
+              --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "v$VER" app/build/app/outputs/flutter-apk/app-release.apk#AniPix-Stream.apk \
+              --title "AniPix Stream v$VER" \
+              --notes "AniPix Stream v$VER - new build" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

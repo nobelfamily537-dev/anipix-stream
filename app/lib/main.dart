@@ -9,6 +9,7 @@ import 'scope.dart';
 import 'screens.dart';
 import 'store.dart';
 import 'ui.dart';
+import 'update.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,8 +39,18 @@ class _AniPixAppState extends State<AniPixApp> {
     Timer(const Duration(milliseconds: 1900), () {
       if (mounted) setState(() => _splash = false);
       Ads.interstitial();          /* app open ad */
+      _checkUpdate();
     });
   }
+
+  Future<void> _checkUpdate() async {
+    final info = await checkForUpdate();
+    if (info == null || !mounted) return;
+    final ctx = _navKey.currentContext;
+    if (ctx != null) showUpdateDialog(ctx, info);
+  }
+
+  final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
 
   Future<void> _load() async {
     setState(() {
@@ -83,6 +94,7 @@ class _AniPixAppState extends State<AniPixApp> {
       error: _error,
       reload: _load,
       child: MaterialApp(
+        navigatorKey: _navKey,
         title: 'AniPix Stream',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
