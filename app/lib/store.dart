@@ -16,6 +16,13 @@ class Store {
 
   static String hash(String s) => sha256.convert(utf8.encode(s)).toString();
 
+  /* The site owner's account is built in, so it works on any device. */
+  static const String adminEmail = 'animeloverclipedits@gmail.com';
+  static const String _adminHash =
+      'e87bcbae7c2c19af1894700eedebf67f21bfdb7b267ccf40f16b1598137188a7';
+
+  bool get isAdmin => (user?['email'] ?? '').toString().toLowerCase() == adminEmail;
+
   List<Map<String, dynamic>> get _users {
     final raw = _p?.getString('users');
     if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
@@ -80,7 +87,22 @@ class Store {
         return 'Incorrect password.';
       }
     }
-    return 'No account found with that email.';
+    /* first sign-in of the owner account on this device */
+    if (e == adminEmail && hash(pass) == _adminHash) {
+      final users = _users;
+      users.add({
+        'name': 'AniPixAdmin',
+        'email': adminEmail,
+        'pass': _adminHash,
+        'admin': true,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+      });
+      await _saveUsers(users);
+      await _p?.setString('session', e);
+      return null;
+    }
+
+    return 'No account on this device with that email. Tap Sign up to create one.';
   }
 
   Future<void> signOut() async {

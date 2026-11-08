@@ -11,7 +11,7 @@ const String kGitHubRaw =
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '1.6.0';
+const String kAppVersion = '1.7.0';
 
 class Api {
   /// The last library JSON as received — the admin screen publishes this back.

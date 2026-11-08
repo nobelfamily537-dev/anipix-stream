@@ -1659,6 +1659,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               MaterialPageRoute(builder: (_) => const SupportScreen()),
             ),
           ),
+          if (Store.i.isAdmin)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: kBrand.withOpacity(0.16),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: kBrand.withOpacity(0.5)),
+                ),
+                child: const Text('ADMIN',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: kBrand)),
+              ),
+            ),
           ListTile(
             leading: const Icon(Icons.admin_panel_settings_outlined, color: kMuted, size: 20),
             title: const Text('Admin console', style: TextStyle(fontSize: 13.5)),
