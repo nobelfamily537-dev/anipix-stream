@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -65,6 +66,50 @@ class AdminService {
   }
 }
 
+/// Uploads a video to UFOLOAD and returns the embed link.
+class UfoloadService {
+  static const String _keyPref = 'ufoload_api_key';
+
+  static Future<String?> savedKey() async {
+    final p = await SharedPreferences.getInstance();
+    final k = p.getString(_keyPref);
+    return (k == null || k.isEmpty) ? null : k;
+  }
+
+  static Future<void> saveKey(String key) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_keyPref, key.trim());
+  }
+
+  /// Returns the embed url, or throws with a readable message.
+  static Future<String> upload(String path, String key) async {
+    final req = http.MultipartRequest(
+      'POST',
+      Uri.parse('https://ufoload.com/api/v1/files?folder_id=root'),
+    );
+    req.headers['Authorization'] = 'Bearer ${key.trim()}';
+    req.files.add(await http.MultipartFile.fromPath('file', path));
+
+    final streamed = await req.send();
+    final body = await streamed.stream.bytesToString();
+
+    if (streamed.statusCode == 401) throw 'API key galat hai (401).';
+    if (streamed.statusCode == 413) throw 'File plan limit se badi hai (413).';
+    if (streamed.statusCode == 409) throw 'Storage full (409).';
+    if (streamed.statusCode != 200 && streamed.statusCode != 201) {
+      throw 'Upload failed (${streamed.statusCode}).';
+    }
+
+    final j = jsonDecode(body);
+    final file = (j is Map) ? j['file'] : null;
+    final pid = (file is Map) ? (file['public_id'] ?? '') : '';
+    if (pid.toString().isEmpty) throw 'Upload hua par public_id nahi mila.';
+
+    /* status moves uploading -> queued -> processing -> ready */
+    return 'https://iframe.andromedans.live/e/$pid';
+  }
+}
+
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
 
@@ -78,6 +123,9 @@ class _AdminScreenState extends State<AdminScreen> {
   final _title = TextEditingController();
   final _url = TextEditingController();
   final _quality = TextEditingController(text: '720p');
+  final _ufoKey = TextEditingController();
+  bool _uploading = false;
+  String? _uploadInfo;
 
   String? _playlistId;
   int _season = 1;
@@ -92,6 +140,9 @@ class _AdminScreenState extends State<AdminScreen> {
     AdminService.savedKey().then((k) {
       if (k != null && mounted) setState(() => _key.text = k);
     });
+    UfoloadService.savedKey().then((k) {
+      if (k != null && mounted) setState(() => _ufoKey.text = k);
+    });
   }
 
   @override
@@ -101,6 +152,7 @@ class _AdminScreenState extends State<AdminScreen> {
     _title.dispose();
     _url.dispose();
     _quality.dispose();
+    _ufoKey.dispose();
     super.dispose();
   }
 
@@ -153,6 +205,42 @@ class _AdminScreenState extends State<AdminScreen> {
         _busy = false;
         _messageOk = false;
         _message = err;
+      });
+    }
+  }
+
+  Future<void> _pickAndUpload() async {
+    if (_ufoKey.text.trim().isEmpty) {
+      setState(() {
+        _uploadInfo = 'Pehle UFOLOAD API key daalo (ufo_...).';
+      });
+      return;
+    }
+    try {
+      final picked = await FilePicker.platform.pickFiles(type: FileType.video);
+      final path = picked?.files.single.path;
+      if (path == null) return;
+
+      setState(() {
+        _uploading = true;
+        _uploadInfo = 'Uploading… bada file hai to kuch minute lagenge.';
+      });
+
+      final embed = await UfoloadService.upload(path, _ufoKey.text);
+      await UfoloadService.saveKey(_ufoKey.text);
+
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _url.text = embed;
+        _kind = 'embed';
+        _uploadInfo = 'Upload ho gaya. Convert hone mein 5-15 min — phir link chalega.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _uploadInfo = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -276,6 +364,39 @@ class _AdminScreenState extends State<AdminScreen> {
             decoration: const InputDecoration(hintText: 'e.g. The witch awakens'),
           ),
           const SizedBox(height: 14),
+
+          /* ---------- UFOLOAD ---------- */
+          const Text('UFOLOAD API key (ufo_…)',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _ufoKey,
+            obscureText: true,
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(hintText: 'ufo_…'),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 42,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: kBrand.withOpacity(0.6)),
+                foregroundColor: kBrand,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: _uploading ? null : _pickAndUpload,
+              icon: _uploading
+                  ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.cloud_upload_outlined, size: 17),
+              label: Text(_uploading ? 'Uploading…' : 'Pick video & upload to UFOLOAD',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          if (_uploadInfo != null) ...[
+            const SizedBox(height: 6),
+            Text(_uploadInfo!, style: const TextStyle(fontSize: 11.5, color: kMuted, height: 1.4)),
+          ],
+          const SizedBox(height: 16),
 
           const Text('Video link',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
