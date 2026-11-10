@@ -559,6 +559,7 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
   String _kind = 'embed';
   bool _uploading = false;
   String? _info;
+  Map<String, int> _views = {};
 
   @override
   void initState() {
@@ -567,6 +568,9 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
       if (k != null && mounted && _ufoKey.text.isEmpty) setState(() => _ufoKey.text = k);
     });
     _ufoKey.addListener(_scheduleSaveKey);
+    Api.fetchViews().then((v) {
+      if (mounted) setState(() => _views = v);
+    });
   }
 
   Timer? _ufoTimer;
@@ -788,7 +792,8 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
               onTap: () => _editEpisode(e),
               title: Text('S${e.season} E${e.n}${e.title.isNotEmpty ? ' · ${e.title}' : ''}',
                   style: const TextStyle(fontSize: 13)),
-              subtitle: Text(e.sources.map((s) => s.q).join(' · '),
+              subtitle: Text(
+                  '${e.sources.map((s) => s.q).join(' · ')}  ·  👁 ${_views[e.id] ?? 0} views',
                   style: const TextStyle(fontSize: 11, color: kMuted)),
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),

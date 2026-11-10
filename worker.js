@@ -194,25 +194,80 @@ async function handleMedia(request, env) {
   }));
 }
 
-/* ---------------- view counter (KV) ---------------- */
+/* ---------------- view counter (stored in the repo, no KV needed) ---------------- */
+const VIEWS_PATH = 'views.json';
+let viewCache = {};          // in-memory counters for this isolate
+let viewsFetchedAt = 0;
+let lastFlushAt = 0;
+const FLUSH_EVERY_MS = 3 * 60 * 1000;
+
+async function readViews(env) {
+  if (Date.now() - viewsFetchedAt < 60 * 1000) return viewCache;
+  try {
+    const res = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/${VIEWS_PATH}?t=${Date.now()}`);
+    if (res.ok) {
+      const j = await res.json();
+      viewCache = (j && typeof j === 'object') ? j : {};
+    }
+  } catch (e) { /* ignore */ }
+  viewsFetchedAt = Date.now();
+  return viewCache;
+}
+
+async function flushViews(env) {
+  if (!env.GITHUB_TOKEN) return;
+  const headers = {
+    authorization: `Bearer ${env.GITHUB_TOKEN}`,
+    accept: 'application/vnd.github+json',
+    'user-agent': 'anipix-views',
+    'content-type': 'application/json',
+  };
+  const api = `https://api.github.com/repos/${REPO}/contents/${VIEWS_PATH}`;
+  let sha;
+  try {
+    const cur = await fetch(api, { headers });
+    if (cur.ok) {
+      const meta = await cur.json();
+      sha = meta.sha;
+    }
+  } catch (e) { /* ignore */ }
+
+  const body = JSON.stringify(viewCache);
+  try {
+    await fetch(api, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        message: 'views: update counters',
+        content: toBase64(body),
+        branch: BRANCH,
+        ...(sha ? { sha } : {}),
+      }),
+    });
+    lastFlushAt = Date.now();
+  } catch (e) { /* ignore */ }
+}
+
 async function handleView(request, env) {
-  const kv = env.VIEWS;
-  if (!kv) return json(JSON.stringify({ ok: false, error: 'VIEWS KV namespace not bound' }), 200);
+  await readViews(env);
 
   if (request.method === 'POST') {
     let body;
     try { body = await request.json(); } catch (e) { body = null; }
     const id = body && String(body.id || '');
     if (!id) return json(JSON.stringify({ ok: false, error: 'id required' }), 400);
-    const cur = parseInt((await kv.get(id)) || '0', 10);
-    await kv.put(id, String(cur + 1));
-    return json(JSON.stringify({ ok: true, id, views: cur + 1 }));
+
+    viewCache[id] = (parseInt(viewCache[id] || '0', 10) || 0) + 1;
+
+    /* write to the repo at most every few minutes */
+    if (Date.now() - lastFlushAt > FLUSH_EVERY_MS) {
+      lastFlushAt = Date.now();
+      await flushViews(env);
+    }
+    return json(JSON.stringify({ ok: true, id, views: viewCache[id] }));
   }
 
-  const out = {};
-  const list = await kv.list({ limit: 1000 });
-  for (const k of list.keys) out[k.name] = parseInt((await kv.get(k.name)) || '0', 10);
-  return json(JSON.stringify({ ok: true, views: out }));
+  return json(JSON.stringify({ ok: true, views: viewCache }));
 }
 
 export default {
