@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -113,16 +114,28 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   String? _message;
   bool _ok = false;
 
+  Timer? _keyTimer;
+
   @override
   void initState() {
     super.initState();
     AdminService.savedKey().then((k) {
-      if (k != null && mounted) setState(() => _key.text = k);
+      if (k != null && mounted && _key.text.isEmpty) setState(() => _key.text = k);
+    });
+    _key.addListener(_scheduleSave);
+  }
+
+  void _scheduleSave() {
+    _keyTimer?.cancel();
+    _keyTimer = Timer(const Duration(milliseconds: 500), () {
+      final v = _key.text.trim();
+      if (v.isNotEmpty) AdminService.saveKey(v);
     });
   }
 
   @override
   void dispose() {
+    _keyTimer?.cancel();
     _tabs.dispose();
     _key.dispose();
     super.dispose();
@@ -431,7 +444,10 @@ class _EpisodesTab extends StatefulWidget {
   State<_EpisodesTab> createState() => _EpisodesTabState();
 }
 
-class _EpisodesTabState extends State<_EpisodesTab> {
+class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   String? _pid;
   final _epNo = TextEditingController(text: '1');
   final _title = TextEditingController();
@@ -447,12 +463,24 @@ class _EpisodesTabState extends State<_EpisodesTab> {
   void initState() {
     super.initState();
     UfoloadService.savedKey().then((k) {
-      if (k != null && mounted) setState(() => _ufoKey.text = k);
+      if (k != null && mounted && _ufoKey.text.isEmpty) setState(() => _ufoKey.text = k);
+    });
+    _ufoKey.addListener(_scheduleSaveKey);
+  }
+
+  Timer? _ufoTimer;
+
+  void _scheduleSaveKey() {
+    _ufoTimer?.cancel();
+    _ufoTimer = Timer(const Duration(milliseconds: 500), () {
+      final v = _ufoKey.text.trim();
+      if (v.isNotEmpty) UfoloadService.saveKey(v);
     });
   }
 
   @override
   void dispose() {
+    _ufoTimer?.cancel();
     _epNo.dispose();
     _title.dispose();
     _url.dispose();
@@ -494,6 +522,7 @@ class _EpisodesTabState extends State<_EpisodesTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final playlists = widget.lib.playlists;
     if (_pid == null && playlists.isNotEmpty) _pid = playlists.first.id;
     final episodes = _pid == null ? <Episode>[] : widget.lib.episodesOf(_pid!);
@@ -655,6 +684,7 @@ class _EpisodesTabState extends State<_EpisodesTab> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
+              onTap: () => _editEpisode(e),
               title: Text('S${e.season} E${e.n}${e.title.isNotEmpty ? ' · ${e.title}' : ''}',
                   style: const TextStyle(fontSize: 13)),
               subtitle: Text(e.sources.map((s) => s.q).join(' · '),
@@ -669,6 +699,113 @@ class _EpisodesTabState extends State<_EpisodesTab> {
               ),
             ),
       ],
+    );
+  }
+
+  /// Edit an existing episode (link, quality, title) in place.
+  void _editEpisode(Episode e) {
+    final first = e.sources.isNotEmpty ? e.sources.first : null;
+    final title = TextEditingController(text: e.title);
+    final url = TextEditingController(text: first?.url ?? '');
+    final quality = TextEditingController(text: first?.q ?? '720p');
+    String kind = first?.kind ?? 'embed';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 26),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Edit S${e.season} E${e.n}',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: title,
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(labelText: 'Episode title', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: url,
+                keyboardType: TextInputType.url,
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(labelText: 'Video link', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: quality,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(labelText: 'Quality', isDense: true),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButton<String>(
+                      value: kind,
+                      isExpanded: true,
+                      dropdownColor: kSurface,
+                      items: const [
+                        DropdownMenuItem(value: 'embed', child: Text('Embed', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'file', child: Text('Direct MP4', style: TextStyle(fontSize: 13))),
+                      ],
+                      onChanged: (v) => kind = v ?? 'embed',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 44,
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kBrand,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    final u = url.text.trim();
+                    if (!u.startsWith('http')) {
+                      setState(() => _info = 'Paste a full link (https://…).');
+                      return;
+                    }
+                    Navigator.pop(ctx);
+                    widget.onPublish((raw) {
+                      final es = List<dynamic>.from(raw['episodes'] ?? const []);
+                      for (var i = 0; i < es.length; i++) {
+                        final m = es[i];
+                        if (m is Map && m['id'] == e.id) {
+                          final updated = Map<String, dynamic>.from(m);
+                          updated['title'] = title.text.trim();
+                          updated['sources'] = [
+                            {
+                              'q': quality.text.trim().isEmpty ? 'HD' : quality.text.trim(),
+                              'url': u,
+                              'kind': kind,
+                            }
+                          ];
+                          es[i] = updated;
+                        }
+                      }
+                      raw['episodes'] = es;
+                    }, 'Episode updated.');
+                  },
+                  child: const Text('Save changes', style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -711,7 +848,10 @@ class _SettingsTab extends StatefulWidget {
   State<_SettingsTab> createState() => _SettingsTabState();
 }
 
-class _SettingsTabState extends State<_SettingsTab> {
+class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   late final _tabs = TextEditingController(text: widget.lib.home.tabs.join(', '));
   late final _cats = TextEditingController(text: widget.lib.home.categories.join(', '));
   late final _secs = TextEditingController(
@@ -720,6 +860,7 @@ class _SettingsTabState extends State<_SettingsTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
       children: [
