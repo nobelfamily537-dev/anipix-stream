@@ -315,11 +315,12 @@ class _PlaylistsTabState extends State<_PlaylistsTab> with AutomaticKeepAliveCli
                 const Icon(Icons.drag_handle, size: 16, color: kMuted),
                 const SizedBox(width: 4),
                 ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: SizedBox(
-                width: 42,
-                height: 56,
-                  child: AppImage(src: p.thumb, cacheWidth: 160, fallback: Container(color: kSurface2)),
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 42,
+                    height: 56,
+                    child: AppImage(src: p.thumb, cacheWidth: 160, fallback: Container(color: kSurface2)),
+                  ),
                 ),
               ],
             ),
