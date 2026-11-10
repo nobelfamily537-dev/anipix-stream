@@ -10,6 +10,15 @@ const String kGitHubRaw =
     'https://raw.githubusercontent.com/nobelfamily537-dev/anipix-stream/main/library.json';
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
+/// Shared when the user taps Share — the site plus the app download.
+const String kAppUrl =
+    'https://github.com/nobelfamily537-dev/anipix-stream/releases/latest';
+
+const String kShareText =
+    '🎬 AniPix Stream — anime subbed & dubbed in HD\n'
+    'Watch on the site: $kBaseUrl\n'
+    'Get the app: $kAppUrl';
+
 /// Shown in the app so you can tell which build is installed.
 const String kAppVersion = '2.2.0';
 

@@ -1,5 +1,5 @@
 {
-  "version": "2.2.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.2.0/app-release.apk",
-  "notes": "For you moved to the player; Like / Share / Watchlist buttons"
+  "version": "2.2.1",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.2.1/app-release.apk",
+  "notes": "Share button opens the Android share sheet with the app link"
 }

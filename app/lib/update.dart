@@ -103,6 +103,16 @@ class UpdateService {
 
 const MethodChannel _installChannel = MethodChannel('anipix/ads');
 
+/// Opens the Android share sheet with the app link.
+Future<bool> shareApp([String? text]) async {
+  try {
+    final ok = await _installChannel.invokeMethod<bool>('share', {'text': text ?? kShareText});
+    return ok == true;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Downloads the APK inside the app and opens the system installer.
 Future<bool> installUpdate(UpdateInfo info) async {
   try {

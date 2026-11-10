@@ -633,11 +633,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         _ActionChip(
                           icon: Icons.ios_share,
                           label: 'Share',
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: '$kBaseUrl/#/detail/${playlist.id}'));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 2)),
-                            );
+                          onTap: () async {
+                            final ok = await shareApp();
+                            if (!ok && context.mounted) {
+                              Clipboard.setData(const ClipboardData(text: kShareText));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 2)),
+                              );
+                            }
                           },
                         ),
                         const SizedBox(width: 8),
@@ -1198,11 +1201,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     _pillButton(
                       icon: Icons.ios_share,
                       label: 'Share',
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: '$kBaseUrl/#/detail/${widget.playlist.id}'));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 2)),
-                        );
+                      onTap: () async {
+                        final ok = await shareApp();
+                        if (!ok && context.mounted) {
+                          Clipboard.setData(const ClipboardData(text: kShareText));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 2)),
+                          );
+                        }
                       },
                     ),
                     const SizedBox(width: 8),

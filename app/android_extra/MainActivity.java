@@ -55,6 +55,17 @@ public class MainActivity extends FlutterActivity {
                         showFullScreen(StartAppAd.AdMode.AUTOMATIC, result);
                     } else if ("rewarded".equals(call.method)) {
                         showFullScreen(StartAppAd.AdMode.REWARDED_VIDEO, result);
+                    } else if ("share".equals(call.method)) {
+                        final String text = call.argument("text");
+                        try {
+                            Intent send = new Intent(Intent.ACTION_SEND);
+                            send.setType("text/plain");
+                            send.putExtra(Intent.EXTRA_TEXT, text);
+                            startActivity(Intent.createChooser(send, "Share AniPix Stream"));
+                            result.success(true);
+                        } catch (Throwable t) {
+                            result.success(false);
+                        }
                     } else if ("installApk".equals(call.method)) {
                         final String url = call.argument("url");
                         try {
