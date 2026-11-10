@@ -67,6 +67,7 @@ class Playlist {
   final String thumb;
   final String banner;
   final bool featured;
+  final int order;
 
   const Playlist({
     required this.id,
@@ -82,6 +83,7 @@ class Playlist {
     required this.thumb,
     required this.banner,
     required this.featured,
+    this.order = -1,
   });
 
   factory Playlist.fromJson(Map<String, dynamic> j) => Playlist(
@@ -98,6 +100,7 @@ class Playlist {
         thumb: (j['thumb'] ?? '').toString(),
         banner: (j['banner'] ?? '').toString(),
         featured: j['featured'] == true,
+        order: (j['order'] as num?)?.toInt() ?? -1,
       );
 
   String get dubLabel {
@@ -124,8 +127,16 @@ class HomeLayout {
   final List<String> tabs;
   final List<String> categories;
   final List<HomeSection> sections;
+  final String announcement;
+  final String heroId;
 
-  const HomeLayout({required this.tabs, required this.categories, required this.sections});
+  const HomeLayout({
+    required this.tabs,
+    required this.categories,
+    required this.sections,
+    this.announcement = '',
+    this.heroId = '',
+  });
 
   static const HomeLayout fallback = HomeLayout(
     tabs: ['All', 'Trending', 'Movie', 'Anime', 'TV', 'Kids'],
@@ -148,6 +159,8 @@ class HomeLayout {
       tabs: tabs.isEmpty ? fallback.tabs : tabs,
       categories: cats.isEmpty ? fallback.categories : cats,
       sections: secs.isEmpty ? fallback.sections : secs,
+      announcement: (j['announcement'] ?? '').toString(),
+      heroId: (j['heroId'] ?? '').toString(),
     );
   }
 }

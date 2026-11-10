@@ -5,7 +5,7 @@
  *   everything else -> static assets from ./dist
  */
 
-const DEFAULT_TAG = 'https://youradexchange.com/video/select.php';
+const DEFAULT_TAG = 'https://youradexchange.com/video/select.php?r=12404346';
 const ALLOWED_HOSTS = ['youradexchange.com', 'www.youradexchange.com'];
 
 /* SHA-256 of the publish key. Only the hash lives in the repo, never the key. */
@@ -147,6 +147,74 @@ async function handleLibrary(request, env) {
   return json(JSON.stringify({ ok: false, error: 'Method not allowed' }), 405);
 }
 
+/* ---------------- media upload (thumbnails / banners) ---------------- */
+async function handleMedia(request, env) {
+  if (request.method !== 'POST') return json(JSON.stringify({ ok: false, error: 'POST only' }), 405);
+
+  const supplied = request.headers.get('x-publish-key') || '';
+  const suppliedHash = supplied ? await sha256Hex(supplied) : '';
+  if (!(env.PUBLISH_KEY && supplied === env.PUBLISH_KEY) && suppliedHash !== PUBLISH_KEY_SHA256) {
+    return json(JSON.stringify({ ok: false, error: 'Wrong publish key.' }), 401);
+  }
+  if (!env.GITHUB_TOKEN) return json(JSON.stringify({ ok: false, error: 'GITHUB_TOKEN missing' }), 500);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json(JSON.stringify({ ok: false, error: 'Body must be JSON' }), 400);
+  }
+
+  const name = String(body.name || 'image.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const data = String(body.data || '');
+  if (!data) return json(JSON.stringify({ ok: false, error: 'data (base64) required' }), 400);
+
+  const path = `media/${Date.now()}-${name}`;
+  const headers = {
+    authorization: `Bearer ${env.GITHUB_TOKEN}`,
+    accept: 'application/vnd.github+json',
+    'user-agent': 'anipix-media',
+    'content-type': 'application/json',
+  };
+
+  const put = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ message: `media: ${name}`, content: data, branch: BRANCH }),
+  });
+
+  if (!put.ok) {
+    const detail = await put.text();
+    return json(JSON.stringify({ ok: false, error: `GitHub ${put.status}: ${detail.slice(0, 140)}` }), 502);
+  }
+
+  return json(JSON.stringify({
+    ok: true,
+    url: `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${path}`,
+  }));
+}
+
+/* ---------------- view counter (KV) ---------------- */
+async function handleView(request, env) {
+  const kv = env.VIEWS;
+  if (!kv) return json(JSON.stringify({ ok: false, error: 'VIEWS KV namespace not bound' }), 200);
+
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch (e) { body = null; }
+    const id = body && String(body.id || '');
+    if (!id) return json(JSON.stringify({ ok: false, error: 'id required' }), 400);
+    const cur = parseInt((await kv.get(id)) || '0', 10);
+    await kv.put(id, String(cur + 1));
+    return json(JSON.stringify({ ok: true, id, views: cur + 1 }));
+  }
+
+  const out = {};
+  const list = await kv.list({ limit: 1000 });
+  for (const k of list.keys) out[k.name] = parseInt((await kv.get(k.name)) || '0', 10);
+  return json(JSON.stringify({ ok: true, views: out }));
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -159,6 +227,8 @@ export default {
         version: 'v1.6',
       }));
     }
+    if (url.pathname === '/api/media') return handleMedia(request, env);
+    if (url.pathname === '/api/view') return handleView(request, env);
     if (url.pathname === '/api/vast') return handleVast(request);
     if (url.pathname === '/api/library') return handleLibrary(request, env);
 

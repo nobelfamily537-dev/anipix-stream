@@ -624,6 +624,9 @@ select:hover{border-color:#3c3c4e}
 .ep,.hist,.side-ep{content-visibility:auto;contain-intrinsic-size:auto 120px}
 .gtile,.chip,.mini,.act{will-change:auto}
 
+.announce{margin:10px 14px 0;padding:10px 14px;border-radius:10px;background:rgba(43,217,124,.13);
+  border:1px solid rgba(43,217,124,.45);color:var(--text);font-size:12.5px;font-weight:600;text-align:center}
+
 /* ============ ads ============ */
 .adwrap{display:flex;justify-content:center;align-items:center;margin:20px auto;overflow:hidden;max-width:100%}
 .adwrap:empty{display:none}
@@ -962,7 +965,9 @@ const DEFAULT_DB = {
     sections: [
       {title:'Trending Now 🔥', source:'recent', limit:12},
       {title:'Top rated ⚡', source:'rating', limit:12}
-    ]
+    ],
+    announcement: '',
+    heroId: ''
   }
 };
 let DB = JSON.parse(JSON.stringify(DEFAULT_DB));
@@ -2001,7 +2006,9 @@ function pageHome(){
   const byRating = [...ANIME].sort((a,b)=> b.rating - a.rating);
   const byNew = [...ANIME].sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
   const featured = ANIME.filter(a=>a.featured);
-  const heroItems = (featured.length ? featured : byRating).slice(0,5);
+  const pinned = DB.home && DB.home.heroId ? ANIME.find(a=>a.id===DB.home.heroId) : null;
+  const heroItems = pinned ? [pinned, ...(featured.length?featured:byRating).filter(a=>a.id!==pinned.id)].slice(0,5)
+                           : (featured.length ? featured : byRating).slice(0,5);
 
   const poolFor = (src)=>{
     if(!src) return byNew;
@@ -2027,6 +2034,7 @@ function pageHome(){
     .map(r=>[r.title, r.items, r.opts]);
 
   return `
+  ${DB.home && DB.home.announcement ? `<div class="announce">📢 ${esc(DB.home.announcement)}</div>` : ''}
   ${DB.settings.heroEnabled ? heroHTML(heroItems) : ''}
   <div class="wrap">
     <div class="adwrap" data-ad="leaderboard"></div>

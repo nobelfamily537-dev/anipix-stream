@@ -83,8 +83,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final tabIndex = _tab < tabs.length ? _tab : 0;
 
     final featured = lib.playlists.where((p) => p.featured).toList();
-    final hero = featured.isNotEmpty ? featured.first : lib.playlists.first;
-    final recent = List<Playlist>.from(lib.playlists.reversed);
+    final pinned = layout.heroId.isEmpty
+        ? null
+        : lib.playlists.where((p) => p.id == layout.heroId).cast<Playlist?>().firstWhere((p) => true, orElse: () => null);
+    final hero = pinned ?? (featured.isNotEmpty ? featured.first : lib.playlists.first);
+    final ordered = List<Playlist>.from(lib.playlists);
+    final hasOrder = ordered.any((p) => p.order >= 0);
+    if (hasOrder) {
+      ordered.sort((a, b) {
+        final ao = a.order < 0 ? 9999 : a.order;
+        final bo = b.order < 0 ? 9999 : b.order;
+        return ao.compareTo(bo);
+      });
+    } else {
+      ordered.sort((a, b) => b.year.compareTo(a.year));
+    }
+    final recent = ordered;
     final top = List<Playlist>.from(lib.playlists)..sort((a, b) => b.rating.compareTo(a.rating));
 
     List<Playlist> poolFor(String source) {
@@ -172,6 +186,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
 
         if (_update != null) UpdateBanner(info: _update!),
+        if (layout.announcement.trim().isNotEmpty)
+          Container(
+            margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: kBrand.withOpacity(0.13),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: kBrand.withOpacity(0.45)),
+            ),
+            child: Text('📢  ${layout.announcement}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+          ),
         const SizedBox(height: 10),
         _HeroCard(playlist: hero, library: lib),
 
@@ -1040,6 +1067,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     Store.i.pushHistory(widget.playlist.id, _episode.season, _episode.n);
     /* rewarded video on every episode open; fall back to an interstitial
        when Start.io has no rewarded fill for this user */
+    Api.countView(_episode.id);
     Ads.rewarded().then((ok) {
       if (!ok) Ads.interstitial();
     });

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -24,6 +25,28 @@ class AdminService {
   static Future<void> saveKey(String key) async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_keyPref, key.trim());
+  }
+
+  /// Uploads an image to the repo through the worker and returns its URL.
+  static Future<String> uploadImage(String path) async {
+    final key = await savedKey() ?? '';
+    if (key.isEmpty) return '';
+    final bytes = await File(path).readAsBytes();
+    final name = path.split('/').last;
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$kBaseUrl/api/media'),
+            headers: {'content-type': 'application/json', 'x-publish-key': key},
+            body: jsonEncode({'name': name, 'data': base64Encode(bytes)}),
+          )
+          .timeout(const Duration(seconds: 60));
+      if (res.statusCode != 200) return '';
+      final j = jsonDecode(res.body);
+      return (j is Map && j['ok'] == true) ? (j['url'] ?? '').toString() : '';
+    } catch (_) {
+      return '';
+    }
   }
 
   /// Applies [mutate] to the raw library JSON and publishes it.
@@ -226,13 +249,29 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
 /* ------------------------------------------------------------- playlists */
 
-class _PlaylistsTab extends StatelessWidget {
+class _PlaylistsTab extends StatefulWidget {
   final Library lib;
   final Future<void> Function(void Function(Map<String, dynamic>), String) onPublish;
   const _PlaylistsTab({required this.lib, required this.onPublish});
 
   @override
+  State<_PlaylistsTab> createState() => _PlaylistsTabState();
+}
+
+class _PlaylistsTabState extends State<_PlaylistsTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  late List<Playlist> _list = List<Playlist>.from(widget.lib.playlists);
+
+  Library get lib => widget.lib;
+  Future<void> Function(void Function(Map<String, dynamic>), String) get onPublish => widget.onPublish;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
+    if (_list.length != lib.playlists.length) _list = List<Playlist>.from(lib.playlists);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
@@ -242,21 +281,47 @@ class _PlaylistsTab extends StatelessWidget {
         icon: const Icon(Icons.add, size: 18),
         label: const Text('New playlist', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
-      body: ListView.separated(
+      body: ReorderableListView.builder(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
-        itemCount: lib.playlists.length,
-        separatorBuilder: (_, __) => const Divider(height: 1, color: kLine),
+        itemCount: _list.length,
+        onReorder: (oldIndex, newIndex) {
+          if (newIndex > oldIndex) newIndex -= 1;
+          final moved = _list.removeAt(oldIndex);
+          _list.insert(newIndex, moved);
+          setState(() {});
+          onPublish((raw) {
+            final ps = List<dynamic>.from(raw['playlists'] ?? const []);
+            final byId = {for (final p in ps) if (p is Map) p['id']: p};
+            final out = <dynamic>[];
+            for (var i = 0; i < _list.length; i++) {
+              final src = byId[_list[i].id];
+              if (src is Map) {
+                final m = Map<String, dynamic>.from(src);
+                m['order'] = i;
+                out.add(m);
+              }
+            }
+            raw['playlists'] = out;
+          }, 'Order saved.');
+        },
         itemBuilder: (context, i) {
-          final p = lib.playlists[i];
+          final p = _list[i];
           return ListTile(
+            key: ValueKey(p.id),
             contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-            leading: ClipRRect(
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.drag_handle, size: 16, color: kMuted),
+                const SizedBox(width: 4),
+                ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: SizedBox(
                 width: 42,
                 height: 56,
-                child: AppImage(src: p.thumb, cacheWidth: 160, fallback: Container(color: kSurface2)),
-              ),
+                  child: AppImage(src: p.thumb, cacheWidth: 160, fallback: Container(color: kSurface2)),
+                ),
+              ],
             ),
             title: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
@@ -347,8 +412,8 @@ class _PlaylistsTab extends StatelessWidget {
               _field('Rating', rating, number: true),
               _field('Genres (comma separated)', genres, hint: 'Fantasy, Action'),
               _field('Audio (comma separated)', audio, hint: 'Hindi, Japanese'),
-              _field('Thumbnail URL', thumb, hint: 'https://… (or leave empty)'),
-              _field('Banner URL', banner, hint: 'https://… (or leave empty)'),
+              _fieldWithUpload('Thumbnail', thumb),
+              _fieldWithUpload('Banner', banner),
               Row(
                 children: [
                   const Text('Dub:', style: TextStyle(fontSize: 12.5, color: kMuted)),
@@ -416,6 +481,41 @@ class _PlaylistsTab extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _fieldWithUpload(String label, TextEditingController c) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: c,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                labelText: label,
+                hintText: 'https://… or upload',
+                isDense: true,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Upload from phone',
+            icon: const Icon(Icons.add_photo_alternate_outlined, size: 20, color: kBrand),
+            onPressed: () async {
+              final picked = await FilePicker.platform.pickFiles(type: FileType.image);
+              final path = picked?.files.single.path;
+              if (path == null) return;
+              final url = await AdminService.uploadImage(path);
+              if (url.isNotEmpty) {
+                c.text = url;
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+        ],
       ),
     );
   }
@@ -857,6 +957,8 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
   late final _secs = TextEditingController(
     text: widget.lib.home.sections.map((s) => '${s.title} | ${s.source} | ${s.limit}').join('\n'),
   );
+  late final _ann = TextEditingController(text: widget.lib.home.announcement);
+  late String _heroId = widget.lib.home.heroId;
 
   @override
   Widget build(BuildContext context) {
@@ -895,6 +997,41 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
               style: TextStyle(fontSize: 11, color: kMuted)),
         ),
         const SizedBox(height: 16),
+        TextField(
+          controller: _ann,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            labelText: 'Announcement banner (home)',
+            hintText: 'Har Friday naya episode',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text('Hero playlist (big banner)',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: kSurface2,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: kLine),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: widget.lib.playlists.any((p) => p.id == _heroId) ? _heroId : '',
+              isExpanded: true,
+              dropdownColor: kSurface,
+              items: [
+                const DropdownMenuItem(value: '', child: Text('Auto (featured)', style: TextStyle(fontSize: 13))),
+                for (final p in widget.lib.playlists)
+                  DropdownMenuItem(value: p.id, child: Text(p.title, style: const TextStyle(fontSize: 13))),
+              ],
+              onChanged: (v) => setState(() => _heroId = v ?? ''),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         SizedBox(
           height: 46,
           child: ElevatedButton(
@@ -917,10 +1054,14 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
                 });
               }
               widget.onPublish((raw) {
+                final prev = (raw['home'] is Map) ? Map<String, dynamic>.from(raw['home'] as Map) : <String, dynamic>{};
                 raw['home'] = {
+                  ...prev,
                   'tabs': tabs,
                   'categories': cats,
                   'sections': secs,
+                  'announcement': _ann.text.trim(),
+                  'heroId': _heroId,
                 };
               }, 'Home layout saved.');
             },

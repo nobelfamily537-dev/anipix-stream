@@ -8,3 +8,10 @@ binding = "ASSETS"
 
 [observability]
 enabled = true
+
+# View counters. Create the namespace once:
+#   Cloudflare dashboard -> Storage & Databases -> KV -> Create namespace "anipix-views"
+# then paste its id below and redeploy.
+# [[kv_namespaces]]
+# binding = "VIEWS"
+# id = "PASTE_NAMESPACE_ID_HERE"

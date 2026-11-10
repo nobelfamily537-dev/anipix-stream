@@ -11,9 +11,37 @@ const String kGitHubRaw =
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '1.9.1';
+const String kAppVersion = '2.0.0';
 
 class Api {
+  /// Fire-and-forget view counter (Cloudflare KV). Safe to ignore failures.
+  static void countView(String episodeId) {
+    try {
+      http
+          .post(
+            Uri.parse('$kBaseUrl/api/view'),
+            headers: {'content-type': 'application/json'},
+            body: '{"id":"$episodeId"}',
+          )
+          .timeout(const Duration(seconds: 8))
+          .catchError((_) => http.Response('', 0));
+    } catch (_) {}
+  }
+
+  /// Returns episodeId -> views. Empty when the KV namespace is not set up.
+  static Future<Map<String, int>> fetchViews() async {
+    try {
+      final res = await http.get(Uri.parse('$kBaseUrl/api/view')).timeout(const Duration(seconds: 12));
+      if (res.statusCode != 200) return {};
+      final j = jsonDecode(res.body);
+      final v = (j is Map) ? j['views'] : null;
+      if (v is! Map) return {};
+      return v.map((k, val) => MapEntry(k.toString(), (val as num).toInt()));
+    } catch (_) {
+      return {};
+    }
+  }
+
   /// The last library JSON as received — the admin screen publishes this back.
   static Map<String, dynamic>? lastRaw;
 
