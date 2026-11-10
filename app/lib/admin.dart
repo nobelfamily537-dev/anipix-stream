@@ -80,9 +80,68 @@ class AdminService {
   }
 }
 
+class UfoAccount {
+  final String name;
+  final String key;
+  const UfoAccount({required this.name, required this.key});
+
+  Map<String, dynamic> toJson() => {'name': name, 'key': key};
+
+  factory UfoAccount.fromJson(Map<String, dynamic> j) =>
+      UfoAccount(name: (j['name'] ?? '').toString(), key: (j['key'] ?? '').toString());
+
+  String get masked {
+    if (key.length <= 8) return '••••';
+    return '${key.substring(0, 4)}••••${key.substring(key.length - 4)}';
+  }
+}
+
 /// Uploads a video to UFOLOAD and returns the embed link.
 class UfoloadService {
-  static const String _keyPref = 'ufoload_api_key';
+  static const String _keyPref = 'ufoload_api_key';       // legacy single key
+  static const String _accountsPref = 'ufoload_accounts'; // list of accounts
+
+  static Future<List<UfoAccount>> accounts() async {
+    final p = await SharedPreferences.getInstance();
+    final out = <UfoAccount>[];
+    final raw = p.getString(_accountsPref);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        for (final e in jsonDecode(raw) as List) {
+          if (e is Map) out.add(UfoAccount.fromJson(Map<String, dynamic>.from(e)));
+        }
+      } catch (_) {}
+    }
+    if (out.isEmpty) {
+      final old = p.getString(_keyPref);
+      if (old != null && old.trim().isNotEmpty) {
+        out.add(UfoAccount(name: 'Account 1', key: old.trim()));
+        await saveAccounts(out);
+      }
+    }
+    return out;
+  }
+
+  static Future<void> saveAccounts(List<UfoAccount> list) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_accountsPref, jsonEncode(list.map((e) => e.toJson()).toList()));
+  }
+
+  static Future<void> addAccount(String name, String key) async {
+    final list = await accounts();
+    list.add(UfoAccount(
+      name: name.trim().isEmpty ? 'Account ${list.length + 1}' : name.trim(),
+      key: key.trim(),
+    ));
+    await saveAccounts(list);
+  }
+
+  static Future<void> removeAccount(int index) async {
+    final list = await accounts();
+    if (index < 0 || index >= list.length) return;
+    list.removeAt(index);
+    await saveAccounts(list);
+  }
 
   static Future<String?> savedKey() async {
     final p = await SharedPreferences.getInstance();
@@ -555,6 +614,8 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
   final _url = TextEditingController();
   final _quality = TextEditingController(text: '720p');
   final _ufoKey = TextEditingController();
+  List<UfoAccount> _accounts = [];
+  int _accIdx = 0;
   int _season = 1;
   String _kind = 'embed';
   bool _uploading = false;
@@ -564,28 +625,18 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
   @override
   void initState() {
     super.initState();
-    UfoloadService.savedKey().then((k) {
-      if (k != null && mounted && _ufoKey.text.isEmpty) setState(() => _ufoKey.text = k);
+    UfoloadService.accounts().then((list) {
+      if (mounted) setState(() => _accounts = list);
     });
-    _ufoKey.addListener(_scheduleSaveKey);
     Api.fetchViews().then((v) {
       if (mounted) setState(() => _views = v);
     });
   }
 
-  Timer? _ufoTimer;
 
-  void _scheduleSaveKey() {
-    _ufoTimer?.cancel();
-    _ufoTimer = Timer(const Duration(milliseconds: 500), () {
-      final v = _ufoKey.text.trim();
-      if (v.isNotEmpty) UfoloadService.saveKey(v);
-    });
-  }
 
   @override
   void dispose() {
-    _ufoTimer?.cancel();
     _epNo.dispose();
     _title.dispose();
     _url.dispose();
@@ -595,10 +646,12 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
   }
 
   Future<void> _upload() async {
-    if (_ufoKey.text.trim().isEmpty) {
-      setState(() => _info = 'Paste your UFOLOAD API key first (ufo_…).');
+    if (_accounts.isEmpty) {
+      setState(() => _info = 'Add a UFOLOAD account first (Settings tab).');
       return;
     }
+    if (_accIdx >= _accounts.length) _accIdx = 0;
+    final acc = _accounts[_accIdx];
     try {
       final picked = await FilePicker.platform.pickFiles(type: FileType.video);
       final path = picked?.files.single.path;
@@ -607,8 +660,7 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
         _uploading = true;
         _info = 'Uploading… a big file can take a few minutes.';
       });
-      final embed = await UfoloadService.upload(path, _ufoKey.text);
-      await UfoloadService.saveKey(_ufoKey.text);
+      final embed = await UfoloadService.upload(path, acc.key);
       if (!mounted) return;
       setState(() {
         _uploading = false;
@@ -680,12 +732,21 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
           decoration: const InputDecoration(labelText: 'Episode title (optional)', isDense: true),
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _ufoKey,
-          obscureText: true,
-          style: const TextStyle(fontSize: 13),
-          decoration: const InputDecoration(labelText: 'UFOLOAD API key (ufo_…)', isDense: true),
-        ),
+        const Text('Upload to account',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+        const SizedBox(height: 6),
+        if (_accounts.isEmpty)
+          const Text('No UFOLOAD account yet — add one in the Settings tab.',
+              style: TextStyle(fontSize: 11.5, color: kMuted))
+        else
+          _dropdown<int>(
+            value: _accIdx < _accounts.length ? _accIdx : 0,
+            items: [
+              for (var i = 0; i < _accounts.length; i++)
+                MapEntry(i, '${_accounts[i].name}  (${_accounts[i].masked})'),
+            ],
+            onChanged: (v) => setState(() => _accIdx = v ?? 0),
+          ),
         const SizedBox(height: 8),
         SizedBox(
           height: 42,
@@ -964,7 +1025,29 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
     text: widget.lib.home.sections.map((s) => '${s.title} | ${s.source} | ${s.limit}').join('\n'),
   );
   late final _ann = TextEditingController(text: widget.lib.home.announcement);
+  final _accName = TextEditingController();
+  final _accKey = TextEditingController();
+  List<UfoAccount> _ufo = [];
+  bool _ufoLoaded = false;
   late String _heroId = widget.lib.home.heroId;
+
+  @override
+  void initState() {
+    super.initState();
+    UfoloadService.accounts().then((l) {
+      if (mounted) setState(() {
+        _ufo = l;
+        _ufoLoaded = true;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _accName.dispose();
+    _accKey.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1072,6 +1155,94 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
               }, 'Home layout saved.');
             },
             child: const Text('Save home layout', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ),
+        const SizedBox(height: 30),
+        const Text('UFOLOAD accounts',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text(
+          'Har account ka apna free quota hota hai — jitne chaho add karo, upload karte waqt chun lo.',
+          style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        if (!_ufoLoaded)
+          const Text('Loading…', style: TextStyle(fontSize: 12, color: kMuted))
+        else if (_ufo.isEmpty)
+          const Text('No account added yet.', style: TextStyle(fontSize: 12, color: kMuted))
+        else
+          for (var i = 0; i < _ufo.length; i++)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: kSurface2,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: kLine),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_ufo[i].name,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                        Text(_ufo[i].masked,
+                            style: const TextStyle(fontSize: 11, color: kMuted)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
+                    onPressed: () async {
+                      await UfoloadService.removeAccount(i);
+                      final l = await UfoloadService.accounts();
+                      if (mounted) setState(() => _ufo = l);
+                    },
+                  ),
+                ],
+              ),
+            ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _accName,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            labelText: 'Account name',
+            hintText: 'Account 2',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _accKey,
+          obscureText: true,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            labelText: 'API key (ufo_…)',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 42,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: kBrand.withOpacity(0.6)),
+              foregroundColor: kBrand,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.add, size: 17),
+            label: const Text('Add account', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+            onPressed: () async {
+              if (_accKey.text.trim().isEmpty) return;
+              await UfoloadService.addAccount(_accName.text, _accKey.text);
+              _accName.clear();
+              _accKey.clear();
+              final l = await UfoloadService.accounts();
+              if (mounted) setState(() => _ufo = l);
+            },
           ),
         ),
         const SizedBox(height: 26),
