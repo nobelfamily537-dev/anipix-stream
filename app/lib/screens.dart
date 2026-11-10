@@ -729,58 +729,52 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ),
           ),
 
-          /* ---------- tabs ---------- */
+          /* ---------- episode list ---------- */
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
-              child: Row(
-                children: [
-                  _Tab(label: 'For you', on: _tab == 0, onTap: () => setState(() => _tab = 0)),
-                  const SizedBox(width: 20),
-                  _Tab(label: 'Comments', on: _tab == 1, onTap: () => setState(() => _tab = 1)),
-                ],
-              ),
+              padding: const EdgeInsets.fromLTRB(14, 20, 14, 10),
+              child: Text('Episodes · Season ${active.toString().padLeft(2, '0')}',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
             ),
           ),
-
-          if (_tab == 0)
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 90),
-              sliver: others.isEmpty
-                  ? const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 26),
-                        child: Text('More anime will appear here.',
-                            style: TextStyle(fontSize: 12.5, color: kMuted)),
-                      ),
-                    )
-                  : SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 14,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 0.46,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) => PosterCard(
-                          playlist: others[i],
-                          width: double.infinity,
-                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => PlaylistScreen(playlistId: others[i].id),
-                          )),
-                        ),
-                        childCount: others.length,
-                      ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) {
+                final ep = seasonEps[i];
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  leading: Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: kSurface2,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: kLine),
                     ),
-            )
-          else
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 90),
-                child: Text('Comments will open once the community feature is live.',
-                    style: const TextStyle(fontSize: 12.5, color: kMuted)),
-              ),
+                    child: Text(ep.n.toString().padLeft(2, '0'),
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  ),
+                  title: Text(
+                    ep.title.isNotEmpty ? ep.title : 'Episode ${ep.n}',
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(ep.sources.map((x) => x.q).join(' · '),
+                      style: const TextStyle(fontSize: 11, color: kMuted)),
+                  trailing: const Icon(Icons.play_circle_outline, size: 22, color: kBrand),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => PlayerScreen(
+                      playlist: playlist,
+                      episodes: eps,
+                      index: eps.indexOf(ep),
+                    ),
+                  )),
+                );
+              },
+              childCount: seasonEps.length,
             ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
@@ -1116,6 +1110,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 
+  Widget _pillButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool on = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: on ? kBrand.withOpacity(0.18) : kSurface2,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: on ? kBrand : kLine),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 15, color: on ? kBrand : kText),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: on ? kBrand : kText)),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _goTo(int i) {
     if (i < 0 || i >= widget.episodes.length) return;
     setState(() {
@@ -1155,6 +1180,43 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 const SizedBox(height: 4),
                 Text('Season ${ep.season} · Episode ${ep.n}${ep.title.isNotEmpty ? ' · ${ep.title}' : ''}',
                     style: const TextStyle(fontSize: 12, color: kMuted)),
+
+                /* like / share / watchlist */
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _pillButton(
+                      icon: Store.i.isLiked(widget.playlist.id) ? Icons.favorite : Icons.favorite_border,
+                      label: Store.i.isLiked(widget.playlist.id) ? 'Liked' : 'Like',
+                      on: Store.i.isLiked(widget.playlist.id),
+                      onTap: () async {
+                        await Store.i.toggleLike(widget.playlist.id);
+                        setState(() {});
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _pillButton(
+                      icon: Icons.ios_share,
+                      label: 'Share',
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: '$kBaseUrl/#/detail/${widget.playlist.id}'));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 2)),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _pillButton(
+                      icon: Store.i.inWatchlist(widget.playlist.id) ? Icons.check : Icons.playlist_add,
+                      label: Store.i.inWatchlist(widget.playlist.id) ? 'In list' : 'Watchlist',
+                      on: Store.i.inWatchlist(widget.playlist.id),
+                      onTap: () async {
+                        await Store.i.toggleWatchlist(widget.playlist.id);
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                ),
 
                 /* quick episode switcher, Moviebox style */
                 if (widget.episodes.any((x) => x.season == ep.season)) ...[
@@ -1272,7 +1334,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ],
                   ),
                 ],
-                const SizedBox(height: 26),
+                const SizedBox(height: 24),
+                const Text('For you',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 208,
+                  child: Builder(builder: (context) {
+                    final lib = LibScope.of(context).library;
+                    final others = (lib?.playlists ?? const <Playlist>[])
+                        .where((x) => x.id != widget.playlist.id)
+                        .take(12)
+                        .toList();
+                    if (others.isEmpty) {
+                      return const Text('More anime will appear here.',
+                          style: TextStyle(fontSize: 12, color: kMuted));
+                    }
+                    return ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: others.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 10),
+                      itemBuilder: (context, i) => PosterCard(
+                        playlist: others[i],
+                        width: 112,
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => PlaylistScreen(playlistId: others[i].id),
+                        )),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 20),
                 GestureDetector(
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SupportScreen()),

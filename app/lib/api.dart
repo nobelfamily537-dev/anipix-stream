@@ -11,7 +11,7 @@ const String kGitHubRaw =
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '2.1.0';
+const String kAppVersion = '2.2.0';
 
 class Api {
   /// Fire-and-forget view counter (Cloudflare KV). Safe to ignore failures.
