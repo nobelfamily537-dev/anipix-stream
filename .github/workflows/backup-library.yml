@@ -1,0 +1,37 @@
+name: Backup library.json
+
+on:
+  schedule:
+    - cron: '0 20 * * *'   # 01:30 IST daily
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy today's library into backups/
+        run: |
+          if [ ! -f library.json ]; then
+            echo "no library.json yet"; exit 0
+          fi
+          mkdir -p backups
+          cp library.json "backups/library-$(date +%F).json"
+          # keep the last 40 files
+          ls -1t backups/library-*.json | tail -n +41 | xargs -r rm --
+          echo "backup files:"; ls -1 backups | tail -5
+
+      - name: Commit
+        run: |
+          git config user.name "AniPix Bot"
+          git config user.email "animeloverclipedits@gmail.com"
+          git add backups
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "backup: library $(date +%F)"
+            git push
+          fi
