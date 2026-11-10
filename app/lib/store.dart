@@ -109,6 +109,21 @@ class Store {
     await _p?.remove('session');
   }
 
+  /* ---- likes ---- */
+  List<String> get likes => _p?.getStringList('likes') ?? <String>[];
+
+  bool isLiked(String id) => likes.contains(id);
+
+  Future<void> toggleLike(String id) async {
+    final list = likes;
+    if (list.contains(id)) {
+      list.remove(id);
+    } else {
+      list.add(id);
+    }
+    await _p?.setStringList('likes', list);
+  }
+
   List<String> get watchlist => _p?.getStringList('watchlist') ?? <String>[];
 
   bool inWatchlist(String id) => watchlist.contains(id);
