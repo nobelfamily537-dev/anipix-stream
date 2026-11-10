@@ -1,17 +1,16 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'models.dart';
 import 'scope.dart';
-import 'store.dart';
 import 'ui.dart';
 
-/// Publishes changes straight to the site (same endpoint the admin panel uses).
+/// Publishes the library straight to the site.
 class AdminService {
   static const String _keyPref = 'anipix_publish_key';
 
@@ -23,32 +22,23 @@ class AdminService {
 
   static Future<void> saveKey(String key) async {
     final p = await SharedPreferences.getInstance();
-    await p.setString(_keyPref, key);
+    await p.setString(_keyPref, key.trim());
   }
 
-  /// Merges [episode] into the current library and publishes it.
-  static Future<String> publishEpisode({
-    required Map<String, dynamic> episode,
-    required String key,
-  }) async {
+  /// Applies [mutate] to the raw library JSON and publishes it.
+  static Future<String> publish(String key, void Function(Map<String, dynamic> raw) mutate) async {
     final raw = Api.lastRaw;
-    if (raw == null) return 'Library not loaded yet. Pull to refresh and try again.';
+    if (raw == null) return 'Library not loaded. Pull to refresh and try again.';
 
-    final next = Map<String, dynamic>.from(raw);
-    final episodes = List<dynamic>.from((next['episodes'] as List?) ?? const []);
-    episodes.removeWhere((e) => e is Map && e['id'] == episode['id']);
-    episodes.add(episode);
-    next['episodes'] = episodes;
+    final next = jsonDecode(jsonEncode(raw)) as Map<String, dynamic>;
+    mutate(next);
     next['version'] = DateTime.now().millisecondsSinceEpoch;
 
     try {
       final res = await http
           .post(
             Uri.parse('$kBaseUrl/api/library'),
-            headers: {
-              'content-type': 'application/json',
-              'x-publish-key': key,
-            },
+            headers: {'content-type': 'application/json', 'x-publish-key': key},
             body: jsonEncode(next),
           )
           .timeout(const Duration(seconds: 30));
@@ -81,7 +71,6 @@ class UfoloadService {
     await p.setString(_keyPref, key.trim());
   }
 
-  /// Returns the embed url, or throws with a readable message.
   static Future<String> upload(String path, String key) async {
     final req = http.MultipartRequest(
       'POST',
@@ -93,8 +82,8 @@ class UfoloadService {
     final streamed = await req.send();
     final body = await streamed.stream.bytesToString();
 
-    if (streamed.statusCode == 401) throw 'API key galat hai (401).';
-    if (streamed.statusCode == 413) throw 'File plan limit se badi hai (413).';
+    if (streamed.statusCode == 401) throw 'API key is wrong (401).';
+    if (streamed.statusCode == 413) throw 'File is bigger than your plan allows (413).';
     if (streamed.statusCode == 409) throw 'Storage full (409).';
     if (streamed.statusCode != 200 && streamed.statusCode != 201) {
       throw 'Upload failed (${streamed.statusCode}).';
@@ -103,12 +92,12 @@ class UfoloadService {
     final j = jsonDecode(body);
     final file = (j is Map) ? j['file'] : null;
     final pid = (file is Map) ? (file['public_id'] ?? '') : '';
-    if (pid.toString().isEmpty) throw 'Upload hua par public_id nahi mila.';
-
-    /* status moves uploading -> queued -> processing -> ready */
+    if (pid.toString().isEmpty) throw 'Uploaded, but no public_id came back.';
     return 'https://iframe.andromedans.live/e/$pid';
   }
 }
+
+/* ================================================================== admin */
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -117,22 +106,12 @@ class AdminScreen extends StatefulWidget {
   State<AdminScreen> createState() => _AdminScreenState();
 }
 
-class _AdminScreenState extends State<AdminScreen> {
+class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 3, vsync: this);
   final _key = TextEditingController();
-  final _epNo = TextEditingController(text: '1');
-  final _title = TextEditingController();
-  final _url = TextEditingController();
-  final _quality = TextEditingController(text: '720p');
-  final _ufoKey = TextEditingController();
-  bool _uploading = false;
-  String? _uploadInfo;
-
-  String? _playlistId;
-  int _season = 1;
-  String _kind = 'embed';
   bool _busy = false;
   String? _message;
-  bool _messageOk = false;
+  bool _ok = false;
 
   @override
   void initState() {
@@ -140,6 +119,333 @@ class _AdminScreenState extends State<AdminScreen> {
     AdminService.savedKey().then((k) {
       if (k != null && mounted) setState(() => _key.text = k);
     });
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    _key.dispose();
+    super.dispose();
+  }
+
+  void _say(String msg, {bool ok = false}) {
+    setState(() {
+      _message = msg;
+      _ok = ok;
+    });
+  }
+
+  Future<void> _publish(void Function(Map<String, dynamic> raw) mutate, String doneMsg) async {
+    if (_key.text.trim().isEmpty) {
+      _say('Enter the publish key first.');
+      return;
+    }
+    setState(() => _busy = true);
+    final err = await AdminService.publish(_key.text.trim(), mutate);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err.isEmpty) {
+      await AdminService.saveKey(_key.text.trim());
+      _say(doneMsg, ok: true);
+      await LibScope.of(context).reload();
+    } else {
+      _say(err);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lib = LibScope.of(context).library;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin console'),
+        bottom: TabBar(
+          controller: _tabs,
+          labelColor: kBrand,
+          unselectedLabelColor: kMuted,
+          indicatorColor: kBrand,
+          tabs: const [Tab(text: 'Playlists'), Tab(text: 'Episodes'), Tab(text: 'Settings')],
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: TextField(
+              controller: _key,
+              obscureText: true,
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(
+                labelText: 'Publish key',
+                hintText: 'anipix-pub-…',
+                isDense: true,
+              ),
+            ),
+          ),
+          if (_message != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(_message!,
+                    style: TextStyle(fontSize: 12, color: _ok ? kBrand : const Color(0xFFFF9D9D))),
+              ),
+            ),
+          if (_busy) const LinearProgressIndicator(color: kBrand, minHeight: 2),
+          Expanded(
+            child: lib == null
+                ? const Center(child: CircularProgressIndicator(color: kBrand))
+                : TabBarView(
+                    controller: _tabs,
+                    children: [
+                      _PlaylistsTab(lib: lib, onPublish: _publish),
+                      _EpisodesTab(lib: lib, onPublish: _publish),
+                      _SettingsTab(lib: lib, onPublish: _publish),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ------------------------------------------------------------- playlists */
+
+class _PlaylistsTab extends StatelessWidget {
+  final Library lib;
+  final Future<void> Function(void Function(Map<String, dynamic>), String) onPublish;
+  const _PlaylistsTab({required this.lib, required this.onPublish});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: kBrand,
+        foregroundColor: Colors.black,
+        onPressed: () => _edit(context, null),
+        icon: const Icon(Icons.add, size: 18),
+        label: const Text('New playlist', style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
+      body: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+        itemCount: lib.playlists.length,
+        separatorBuilder: (_, __) => const Divider(height: 1, color: kLine),
+        itemBuilder: (context, i) {
+          final p = lib.playlists[i];
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 42,
+                height: 56,
+                child: AppImage(src: p.thumb, cacheWidth: 160, fallback: Container(color: kSurface2)),
+              ),
+            ),
+            title: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+            subtitle: Text('${p.year} · ${p.genres.take(2).join(', ')}',
+                style: const TextStyle(fontSize: 11, color: kMuted)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18, color: kMuted),
+                  onPressed: () => _edit(context, p),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
+                  onPressed: () async {
+                    final sure = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: kSurface,
+                        title: const Text('Delete playlist?'),
+                        content: Text('“${p.title}” and its episodes will be removed.',
+                            style: const TextStyle(fontSize: 13, color: kMuted)),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+                        ],
+                      ),
+                    );
+                    if (sure != true) return;
+                    await onPublish((raw) {
+                      final ps = List<dynamic>.from(raw['playlists'] ?? const []);
+                      ps.removeWhere((e) => e is Map && e['id'] == p.id);
+                      raw['playlists'] = ps;
+                      final es = List<dynamic>.from(raw['episodes'] ?? const []);
+                      es.removeWhere((e) => e is Map && e['playlistId'] == p.id);
+                      raw['episodes'] = es;
+                    }, 'Playlist deleted.');
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  int createdAtOf(String? id) {
+    if (id != null) {
+      final ps = (Api.lastRaw?['playlists'] as List?) ?? const [];
+      for (final e in ps) {
+        if (e is Map && e['id'] == id) {
+          return (e['createdAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+        }
+      }
+    }
+    return DateTime.now().millisecondsSinceEpoch;
+  }
+
+  void _edit(BuildContext context, Playlist? existing) {
+    final title = TextEditingController(text: existing?.title ?? '');
+    final year = TextEditingController(text: (existing?.year ?? DateTime.now().year).toString());
+    final rating = TextEditingController(text: (existing?.rating ?? 0).toString());
+    final genres = TextEditingController(text: existing?.genres.join(', ') ?? '');
+    final thumb = TextEditingController(text: existing?.thumb ?? '');
+    final banner = TextEditingController(text: existing?.banner ?? '');
+    final audio = TextEditingController(text: existing?.audio.join(', ') ?? 'Hindi');
+    String dub = existing?.dub ?? 'official';
+    bool featured = existing?.featured ?? false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 26),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(existing == null ? 'New playlist' : 'Edit playlist',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+              _field('Title', title, hint: 'Release that witch'),
+              _field('Year', year, number: true),
+              _field('Rating', rating, number: true),
+              _field('Genres (comma separated)', genres, hint: 'Fantasy, Action'),
+              _field('Audio (comma separated)', audio, hint: 'Hindi, Japanese'),
+              _field('Thumbnail URL', thumb, hint: 'https://… (or leave empty)'),
+              _field('Banner URL', banner, hint: 'https://… (or leave empty)'),
+              Row(
+                children: [
+                  const Text('Dub:', style: TextStyle(fontSize: 12.5, color: kMuted)),
+                  const SizedBox(width: 10),
+                  DropdownButton<String>(
+                    value: dub,
+                    dropdownColor: kSurface,
+                    items: const [
+                      DropdownMenuItem(value: 'official', child: Text('Official', style: TextStyle(fontSize: 13))),
+                      DropdownMenuItem(value: 'sub', child: Text('Sub', style: TextStyle(fontSize: 13))),
+                      DropdownMenuItem(value: 'fan', child: Text('Fan', style: TextStyle(fontSize: 13))),
+                    ],
+                    onChanged: (v) => dub = v ?? 'official',
+                  ),
+                  const Spacer(),
+                  const Text('Featured', style: TextStyle(fontSize: 12.5, color: kMuted)),
+                  Switch(
+                    value: featured,
+                    activeColor: kBrand,
+                    onChanged: (v) => featured = v,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 44,
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kBrand,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    if (title.text.trim().isEmpty) return;
+                    final id = existing?.id ?? 'p${DateTime.now().millisecondsSinceEpoch}';
+                    final item = {
+                      'id': id,
+                      'title': title.text.trim(),
+                      'year': int.tryParse(year.text) ?? 0,
+                      'rating': double.tryParse(rating.text) ?? 0,
+                      'type': existing?.type ?? 'TV',
+                      'genres': genres.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
+                      'audio': audio.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
+                      'dub': dub,
+                      'thumb': thumb.text.trim(),
+                      'banner': banner.text.trim(),
+                      'featured': featured,
+                      'createdAt': createdAtOf(existing?.id),
+                      'desc': existing?.desc ?? '',
+                      'hue': 21,
+                    };
+                    Navigator.pop(ctx);
+                    onPublish((raw) {
+                      final ps = List<dynamic>.from(raw['playlists'] ?? const []);
+                      ps.removeWhere((e) => e is Map && e['id'] == id);
+                      ps.add(item);
+                      raw['playlists'] = ps;
+                    }, existing == null ? 'Playlist created.' : 'Playlist saved.');
+                  },
+                  child: Text(existing == null ? 'Create playlist' : 'Save playlist',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController c, {String? hint, bool number = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: c,
+        keyboardType: number ? TextInputType.number : TextInputType.text,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(labelText: label, hintText: hint, isDense: true),
+      ),
+    );
+  }
+}
+
+/* -------------------------------------------------------------- episodes */
+
+class _EpisodesTab extends StatefulWidget {
+  final Library lib;
+  final Future<void> Function(void Function(Map<String, dynamic>), String) onPublish;
+  const _EpisodesTab({required this.lib, required this.onPublish});
+
+  @override
+  State<_EpisodesTab> createState() => _EpisodesTabState();
+}
+
+class _EpisodesTabState extends State<_EpisodesTab> {
+  String? _pid;
+  final _epNo = TextEditingController(text: '1');
+  final _title = TextEditingController();
+  final _url = TextEditingController();
+  final _quality = TextEditingController(text: '720p');
+  final _ufoKey = TextEditingController();
+  int _season = 1;
+  String _kind = 'embed';
+  bool _uploading = false;
+  String? _info;
+
+  @override
+  void initState() {
+    super.initState();
     UfoloadService.savedKey().then((k) {
       if (k != null && mounted) setState(() => _ufoKey.text = k);
     });
@@ -147,7 +453,6 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   void dispose() {
-    _key.dispose();
     _epNo.dispose();
     _title.dispose();
     _url.dispose();
@@ -156,336 +461,341 @@ class _AdminScreenState extends State<AdminScreen> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    final lib = LibScope.of(context).library;
-    if (lib == null) return;
-
-    final pid = _playlistId;
-    final n = int.tryParse(_epNo.text.trim()) ?? 0;
-    final url = _url.text.trim();
-
-    if (pid == null) return _fail('Pick a playlist.');
-    if (n <= 0) return _fail('Episode number must be 1 or more.');
-    if (!url.startsWith('http')) return _fail('Paste a full link (https://…).');
-    if (_key.text.trim().isEmpty) return _fail('Publish key is required.');
-
-    setState(() {
-      _busy = true;
-      _message = null;
-    });
-
-    final episode = {
-      'id': 'e${DateTime.now().millisecondsSinceEpoch}',
-      'playlistId': pid,
-      'season': _season,
-      'n': n,
-      'title': _title.text.trim(),
-      'at': DateTime.now().millisecondsSinceEpoch,
-      'sources': [
-        {'q': _quality.text.trim().isEmpty ? 'HD' : _quality.text.trim(), 'url': url, 'kind': _kind}
-      ],
-      'downloads': <Map<String, String>>[],
-    };
-
-    final err = await AdminService.publishEpisode(episode: episode, key: _key.text.trim());
-    if (!mounted) return;
-
-    if (err.isEmpty) {
-      await AdminService.saveKey(_key.text.trim());
-      setState(() {
-        _busy = false;
-        _messageOk = true;
-        _message = 'Published — site and app both updated.';
-        _url.clear();
-        _title.clear();
-      });
-      await LibScope.of(context).reload();
-    } else {
-      setState(() {
-        _busy = false;
-        _messageOk = false;
-        _message = err;
-      });
-    }
-  }
-
-  Future<void> _pickAndUpload() async {
+  Future<void> _upload() async {
     if (_ufoKey.text.trim().isEmpty) {
-      setState(() {
-        _uploadInfo = 'Pehle UFOLOAD API key daalo (ufo_...).';
-      });
+      setState(() => _info = 'Paste your UFOLOAD API key first (ufo_…).');
       return;
     }
     try {
       final picked = await FilePicker.platform.pickFiles(type: FileType.video);
       final path = picked?.files.single.path;
       if (path == null) return;
-
       setState(() {
         _uploading = true;
-        _uploadInfo = 'Uploading… bada file hai to kuch minute lagenge.';
+        _info = 'Uploading… a big file can take a few minutes.';
       });
-
       final embed = await UfoloadService.upload(path, _ufoKey.text);
       await UfoloadService.saveKey(_ufoKey.text);
-
       if (!mounted) return;
       setState(() {
         _uploading = false;
         _url.text = embed;
         _kind = 'embed';
-        _uploadInfo = 'Upload ho gaya. Convert hone mein 5-15 min — phir link chalega.';
+        _info = 'Uploaded. Encoding takes 5-15 min, then the link plays.';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _uploading = false;
-        _uploadInfo = e.toString().replaceFirst('Exception: ', '');
+        _info = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
 
-  void _fail(String msg) {
-    setState(() {
-      _messageOk = false;
-      _message = msg;
-    });
+  @override
+  Widget build(BuildContext context) {
+    final playlists = widget.lib.playlists;
+    if (_pid == null && playlists.isNotEmpty) _pid = playlists.first.id;
+    final episodes = _pid == null ? <Episode>[] : widget.lib.episodesOf(_pid!);
+    final seasons = <int>{1, for (final e in episodes) e.season};
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+      children: [
+        const Text('Playlist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+        const SizedBox(height: 6),
+        _dropdown<String>(
+          value: _pid,
+          items: [for (final p in playlists) MapEntry(p.id, p.title)],
+          onChanged: (v) => setState(() => _pid = v),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Season', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+                  const SizedBox(height: 6),
+                  _dropdown<int>(
+                    value: _season,
+                    items: [for (final s in seasons.toList()..sort()) MapEntry(s, 'Season $s')],
+                    onChanged: (v) => setState(() => _season = v ?? 1),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Episode no.', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+                  const SizedBox(height: 6),
+                  TextField(controller: _epNo, keyboardType: TextInputType.number, style: const TextStyle(fontSize: 13)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _title,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(labelText: 'Episode title (optional)', isDense: true),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _ufoKey,
+          obscureText: true,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(labelText: 'UFOLOAD API key (ufo_…)', isDense: true),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 42,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: kBrand.withOpacity(0.6)),
+              foregroundColor: kBrand,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _uploading ? null : _upload,
+            icon: _uploading
+                ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.cloud_upload_outlined, size: 17),
+            label: Text(_uploading ? 'Uploading…' : 'Pick video & upload to UFOLOAD',
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+          ),
+        ),
+        if (_info != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_info!, style: const TextStyle(fontSize: 11.5, color: kMuted, height: 1.4)),
+          ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _url,
+          keyboardType: TextInputType.url,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(labelText: 'Video link', hintText: 'https://…', isDense: true),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _quality,
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(labelText: 'Quality', isDense: true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _dropdown<String>(
+                value: _kind,
+                items: const [
+                  MapEntry('embed', 'Embed (iframe)'),
+                  MapEntry('file', 'Direct MP4'),
+                ],
+                onChanged: (v) => setState(() => _kind = v ?? 'embed'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 46,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kBrand,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final pid = _pid;
+              final n = int.tryParse(_epNo.text.trim()) ?? 0;
+              final url = _url.text.trim();
+              if (pid == null) return setState(() => _info = 'Pick a playlist.');
+              if (n <= 0) return setState(() => _info = 'Episode number must be 1 or more.');
+              if (!url.startsWith('http')) return setState(() => _info = 'Paste a full link (https://…).');
+
+              final ep = {
+                'id': 'e${DateTime.now().millisecondsSinceEpoch}',
+                'playlistId': pid,
+                'season': _season,
+                'n': n,
+                'title': _title.text.trim(),
+                'at': DateTime.now().millisecondsSinceEpoch,
+                'sources': [
+                  {'q': _quality.text.trim().isEmpty ? 'HD' : _quality.text.trim(), 'url': url, 'kind': _kind}
+                ],
+                'downloads': <Map<String, String>>[],
+              };
+              widget.onPublish((raw) {
+                final es = List<dynamic>.from(raw['episodes'] ?? const []);
+                es.add(ep);
+                raw['episodes'] = es;
+              }, 'Episode published.');
+              _url.clear();
+              _title.clear();
+            },
+            child: const Text('Publish episode', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ),
+        const SizedBox(height: 22),
+        const Text('Existing episodes',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        if (episodes.isEmpty)
+          const Text('No episodes yet.', style: TextStyle(fontSize: 12, color: kMuted))
+        else
+          for (final e in episodes)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text('S${e.season} E${e.n}${e.title.isNotEmpty ? ' · ${e.title}' : ''}',
+                  style: const TextStyle(fontSize: 13)),
+              subtitle: Text(e.sources.map((s) => s.q).join(' · '),
+                  style: const TextStyle(fontSize: 11, color: kMuted)),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
+                onPressed: () => widget.onPublish((raw) {
+                  final es = List<dynamic>.from(raw['episodes'] ?? const []);
+                  es.removeWhere((x) => x is Map && x['id'] == e.id);
+                  raw['episodes'] = es;
+                }, 'Episode deleted.'),
+              ),
+            ),
+      ],
+    );
   }
+
+  Widget _dropdown<T>({
+    required T? value,
+    required List<MapEntry<T, String>> items,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: kSurface2,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kLine),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          dropdownColor: kSurface,
+          items: [
+            for (final e in items)
+              DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 13))),
+          ],
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+/* -------------------------------------------------------------- settings */
+
+class _SettingsTab extends StatefulWidget {
+  final Library lib;
+  final Future<void> Function(void Function(Map<String, dynamic>), String) onPublish;
+  const _SettingsTab({required this.lib, required this.onPublish});
+
+  @override
+  State<_SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<_SettingsTab> {
+  late final _tabs = TextEditingController(text: widget.lib.home.tabs.join(', '));
+  late final _cats = TextEditingController(text: widget.lib.home.categories.join(', '));
+  late final _secs = TextEditingController(
+    text: widget.lib.home.sections.map((s) => '${s.title} | ${s.source} | ${s.limit}').join('\n'),
+  );
 
   @override
   Widget build(BuildContext context) {
-    final lib = LibScope.of(context).library;
-    final playlists = lib?.playlists ?? const <Playlist>[];
-    if (_playlistId == null && playlists.isNotEmpty) {
-      _playlistId = playlists.first.id;
-    }
-    final seasons = <int>{1, if (lib != null && _playlistId != null)
-      ...lib.episodesOf(_playlistId!).map((e) => e.season)};
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Admin — add episode')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text('Publish key',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _key,
-            obscureText: true,
-            style: const TextStyle(fontSize: 13),
-            decoration: const InputDecoration(hintText: 'anipix-pub-…'),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+      children: [
+        const Text('Home layout — app + website',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _tabs,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(labelText: 'Tabs (comma separated)', isDense: true),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _cats,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(labelText: 'Categories (comma separated)', isDense: true),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _secs,
+          maxLines: 5,
+          style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace'),
+          decoration: const InputDecoration(
+            labelText: 'Sections — one per line: Title | source | limit',
+            hintText: 'Trending Now 🔥 | recent | 12',
+            isDense: true,
           ),
-          const SizedBox(height: 18),
-
-          const Text('Playlist',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: kSurface2,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: kLine),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text('source: recent · rating · featured · continue · genre:Action',
+              style: TextStyle(fontSize: 11, color: kMuted)),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 46,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kBrand,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _playlistId,
-                isExpanded: true,
-                dropdownColor: kSurface,
-                items: [
-                  for (final p in playlists)
-                    DropdownMenuItem(value: p.id, child: Text(p.title, style: const TextStyle(fontSize: 13))),
-                ],
-                onChanged: (v) => setState(() => _playlistId = v),
-              ),
-            ),
+            onPressed: () {
+              final tabs = _tabs.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+              final cats = _cats.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+              final secs = <Map<String, dynamic>>[];
+              for (final line in _secs.text.split('\n')) {
+                final parts = line.split('|').map((e) => e.trim()).toList();
+                if (parts.isEmpty || parts[0].isEmpty) continue;
+                secs.add({
+                  'title': parts[0],
+                  'source': parts.length > 1 && parts[1].isNotEmpty ? parts[1] : 'recent',
+                  'limit': parts.length > 2 ? (int.tryParse(parts[2]) ?? 10) : 10,
+                });
+              }
+              widget.onPublish((raw) {
+                raw['home'] = {
+                  'tabs': tabs,
+                  'categories': cats,
+                  'sections': secs,
+                };
+              }, 'Home layout saved.');
+            },
+            child: const Text('Save home layout', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
-          const SizedBox(height: 14),
-
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Season',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: kSurface2,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: kLine),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _season,
-                          isExpanded: true,
-                          dropdownColor: kSurface,
-                          items: [
-                            for (final s in seasons.toList()..sort())
-                              DropdownMenuItem(value: s, child: Text('Season $s', style: const TextStyle(fontSize: 13))),
-                          ],
-                          onChanged: (v) => setState(() => _season = v ?? 1),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Episode no.',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _epNo,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          const Text('Episode title (optional)',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _title,
-            style: const TextStyle(fontSize: 13),
-            decoration: const InputDecoration(hintText: 'e.g. The witch awakens'),
-          ),
-          const SizedBox(height: 14),
-
-          /* ---------- UFOLOAD ---------- */
-          const Text('UFOLOAD API key (ufo_…)',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _ufoKey,
-            obscureText: true,
-            style: const TextStyle(fontSize: 13),
-            decoration: const InputDecoration(hintText: 'ufo_…'),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 42,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: kBrand.withOpacity(0.6)),
-                foregroundColor: kBrand,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: _uploading ? null : _pickAndUpload,
-              icon: _uploading
-                  ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.cloud_upload_outlined, size: 17),
-              label: Text(_uploading ? 'Uploading…' : 'Pick video & upload to UFOLOAD',
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-            ),
-          ),
-          if (_uploadInfo != null) ...[
-            const SizedBox(height: 6),
-            Text(_uploadInfo!, style: const TextStyle(fontSize: 11.5, color: kMuted, height: 1.4)),
-          ],
-          const SizedBox(height: 16),
-
-          const Text('Video link',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _url,
-            keyboardType: TextInputType.url,
-            style: const TextStyle(fontSize: 13),
-            decoration: const InputDecoration(hintText: 'https://…'),
-          ),
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Quality',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-                    const SizedBox(height: 6),
-                    TextField(controller: _quality, style: const TextStyle(fontSize: 13)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Type',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: kSurface2,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: kLine),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _kind,
-                          isExpanded: true,
-                          dropdownColor: kSurface,
-                          items: const [
-                            DropdownMenuItem(value: 'embed', child: Text('Embed (iframe)', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'file', child: Text('Direct MP4', style: TextStyle(fontSize: 13))),
-                          ],
-                          onChanged: (v) => setState(() => _kind = v ?? 'embed'),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          SizedBox(
-            height: 46,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kBrand,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: _busy ? null : _submit,
-              child: _busy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Publish episode', style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-          ),
-
-          if (_message != null) ...[
-            const SizedBox(height: 14),
-            Text(_message!,
-                style: TextStyle(
-                    fontSize: 12.5, color: _messageOk ? kBrand : const Color(0xFFFF9D9D))),
-          ],
-
-          const SizedBox(height: 20),
-          const Text(
-            'Publishing writes library.json to the repo. The website and every app pick it up on the next refresh.',
-            style: TextStyle(fontSize: 11, color: kMuted, height: 1.5),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 26),
+        const Text('About the app icon',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        const Text(
+          'Android does not allow changing the launcher icon from inside the app — the icon is part of the APK. '
+          'To use a new icon, the app has to be rebuilt; every user then gets it through the in-app update prompt.',
+          style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.5),
+        ),
+      ],
     );
   }
 }
