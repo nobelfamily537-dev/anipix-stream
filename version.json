@@ -1,5 +1,5 @@
 {
-  "version": "2.5.1",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.5.1/app-release.apk",
-  "notes": "Picture-in-Picture actually enabled in the manifest"
+  "version": "2.5.2",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.5.2/app-release.apk",
+  "notes": "App page and Telegram buttons on the update screen"
 }

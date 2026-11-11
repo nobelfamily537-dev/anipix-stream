@@ -309,6 +309,46 @@ class _UpdateGateState extends State<UpdateGate> {
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.4),
                 ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: kBrand.withOpacity(0.55)),
+                          foregroundColor: kBrand,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.android, size: 17),
+                        label: const Text('App page',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        onPressed: () async {
+                          await launchUrl(Uri.parse(kAppUrl),
+                              mode: LaunchMode.externalApplication);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: kBrand.withOpacity(0.55)),
+                          foregroundColor: kBrand,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.telegram, size: 17),
+                        label: const Text('Telegram',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        onPressed: () async {
+                          await launchUrl(Uri.parse('https://t.me/Anipix_stream'),
+                              mode: LaunchMode.externalApplication);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
