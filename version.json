@@ -1,5 +1,5 @@
 {
-  "version": "2.6.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.6.0/app-release.apk",
-  "notes": "Keys survive reinstall (Android auto backup) + backup/restore code"
+  "version": "2.7.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.7.0/app-release.apk",
+  "notes": "Uploader tab with live % and MB, background uploads, faster chunks"
 }

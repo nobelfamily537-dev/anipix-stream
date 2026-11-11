@@ -84,6 +84,68 @@ class AdminService {
   }
 }
 
+/// One upload, tracked app-wide so it keeps showing while you navigate.
+class UploadJob {
+  final String name;
+  int total;
+  int sent;
+  String status;   // uploading | done | failed
+  String? url;
+  UploadJob({required this.name, this.total = 0, this.sent = 0, this.status = 'uploading', this.url});
+
+  int get percent => total <= 0 ? 0 : ((sent * 100) / total).clamp(0, 100).round();
+  String get mb => '${(sent / 1048576).toStringAsFixed(1)} / ${(total / 1048576).toStringAsFixed(1)} MB';
+}
+
+class UploadTracker extends ChangeNotifier {
+  UploadTracker._();
+  static final UploadTracker i = UploadTracker._();
+
+  final List<UploadJob> jobs = [];
+  bool get busy => jobs.any((j) => j.status == 'uploading');
+
+  void add(UploadJob job) {
+    jobs.insert(0, job);
+    notifyListeners();
+  }
+
+  UploadJob? current() {
+    for (final j in jobs) {
+      if (j.status == 'uploading') return j;
+    }
+    return null;
+  }
+
+  void progress(int percent, int sent, int total) {
+    final job = current();
+    if (job == null) return;
+    job.sent = sent;
+    job.total = total;
+    notifyListeners();
+  }
+
+  void done(String url) {
+    final job = current();
+    if (job == null) return;
+    job.status = 'done';
+    job.url = url;
+    job.sent = job.total;
+    notifyListeners();
+  }
+
+  void fail(String message) {
+    final job = current();
+    if (job == null) return;
+    job.status = 'failed';
+    notifyListeners();
+  }
+
+  void clearFinished() {
+    jobs.removeWhere((j) => j.status != 'uploading');
+    notifyListeners();
+  }
+}
+
 /// Native foreground-service uploader: progress + notification + survives backgrounding.
 class VideoUploader {
   static const MethodChannel _ch = MethodChannel('anipix/upload');
@@ -91,16 +153,31 @@ class VideoUploader {
   static void Function(String embedUrl)? onDone;
   static void Function(String message)? onError;
 
+  static bool _listening = false;
+
   static void listen() {
+    if (_listening) return;
+    _listening = true;
     _ch.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'uploadProgress':
-          onProgress?.call((call.arguments as num).toInt());
+          final m = call.arguments;
+          if (m is Map) {
+            final p = (m['percent'] as num?)?.toInt() ?? 0;
+            final sent = (m['sent'] as num?)?.toInt() ?? 0;
+            final total = (m['total'] as num?)?.toInt() ?? 0;
+            UploadTracker.i.progress(p, sent, total);
+            onProgress?.call(p);
+          }
           break;
         case 'uploadDone':
-          onDone?.call(call.arguments.toString());
+          final m = call.arguments;
+          final url = m is Map ? (m['url'] ?? '').toString() : m.toString();
+          UploadTracker.i.done(url);
+          onDone?.call(url);
           break;
         case 'uploadError':
+          UploadTracker.i.fail(call.arguments.toString());
           onError?.call(call.arguments.toString());
           break;
       }
@@ -109,6 +186,7 @@ class VideoUploader {
   }
 
   static Future<bool> start({required String path, required String key, required String name}) async {
+    listen();
     try {
       final ok = await _ch.invokeMethod<bool>('start', {'path': path, 'key': key, 'name': name});
       return ok == true;
@@ -228,7 +306,7 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
   final _key = TextEditingController();
   bool _busy = false;
   String? _message;
@@ -302,7 +380,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           labelColor: kBrand,
           unselectedLabelColor: kMuted,
           indicatorColor: kBrand,
-          tabs: const [Tab(text: 'Playlists'), Tab(text: 'Episodes'), Tab(text: 'Settings')],
+          isScrollable: true,
+          tabs: const [
+            Tab(text: 'Playlists'),
+            Tab(text: 'Episodes'),
+            Tab(text: 'Uploader'),
+            Tab(text: 'Settings'),
+          ],
         ),
       ),
       body: Column(
@@ -338,6 +422,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     children: [
                       _PlaylistsTab(lib: lib, onPublish: _publish),
                       _EpisodesTab(lib: lib, onPublish: _publish),
+                      const _UploaderTab(),
                       _SettingsTab(lib: lib, onPublish: _publish),
                     ],
                   ),
@@ -698,9 +783,10 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
       final picked = await FilePicker.platform.pickFiles(type: FileType.video);
       final path = picked?.files.single.path;
       if (path == null) return;
+      UploadTracker.i.add(UploadJob(name: path.split('/').last));
       setState(() {
         _uploading = true;
-        _info = 'Uploading… 0%';
+        _info = 'Uploading… 0% — Uploader tab par progress dekho';
       });
 
       final done = Completer<String?>();
@@ -1075,6 +1161,119 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
           ],
           onChanged: onChanged,
         ),
+      ),
+    );
+  }
+}
+
+/* -------------------------------------------------------------- uploader */
+
+class _UploaderTab extends StatefulWidget {
+  const _UploaderTab();
+
+  @override
+  State<_UploaderTab> createState() => _UploaderTabState();
+}
+
+class _UploaderTabState extends State<_UploaderTab> {
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: UploadTracker.i,
+      builder: (context, _) {
+        final jobs = UploadTracker.i.jobs;
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+          children: [
+            Row(
+              children: [
+                const Text('Uploads', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => UploadTracker.i.clearFinished(),
+                  child: const Text('Clear finished', style: TextStyle(fontSize: 12, color: kMuted)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Upload background mein chalta rehta hai — app se bahar jaao ya screen lock karo, phir bhi chalta rahega.',
+              style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            if (jobs.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Text('No uploads yet. Episodes tab se video upload karo.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12.5, color: kMuted)),
+              )
+            else
+              for (final j in jobs) _jobCard(j),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _jobCard(UploadJob j) {
+    final done = j.status == 'done';
+    final failed = j.status == 'failed';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kSurface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: failed ? const Color(0xFFFF8A8A) : (done ? kBrand.withOpacity(0.5) : kLine)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                done ? Icons.check_circle : (failed ? Icons.error_outline : Icons.cloud_upload),
+                size: 18,
+                color: done ? kBrand : (failed ? const Color(0xFFFF8A8A) : kMuted),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(j.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              ),
+              Text(
+                done ? 'Done' : (failed ? 'Failed' : '${j.percent}%'),
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: done ? kBrand : (failed ? const Color(0xFFFF8A8A) : kText)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: done ? 1 : (j.total > 0 ? j.sent / j.total : null),
+              minHeight: 6,
+              backgroundColor: kLine,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                  failed ? const Color(0xFFFF8A8A) : kBrand),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(j.mb, style: const TextStyle(fontSize: 11, color: kMuted)),
+              const Spacer(),
+              if (done && j.url != null)
+                const Text('Link ready', style: TextStyle(fontSize: 11, color: kBrand)),
+            ],
+          ),
+        ],
       ),
     );
   }

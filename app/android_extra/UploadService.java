@@ -150,7 +150,7 @@ public class UploadService extends Service {
 
             OutputStream out = conn.getOutputStream();
             InputStream in = new FileInputStream(file);
-            byte[] buf = new byte[512 * 1024];   // big chunks = fewer syscalls = faster
+            byte[] buf = new byte[1024 * 1024];   // 1 MB chunks = fewer syscalls = faster
             long sent = 0;
             int lastPercent = -1;
             long lastNotify = 0;
@@ -164,8 +164,14 @@ public class UploadService extends Service {
                 if (percent != lastPercent && (now - lastNotify > 350 || percent == 100)) {
                     lastPercent = percent;
                     lastNotify = now;
-                    notifyProgress(percent, "Uploading " + percent + "%");
-                    send("uploadProgress", percent);
+                    notifyProgress(percent, "Uploading " + percent + "%  ·  "
+                            + (sent / (1024 * 1024)) + " / " + (total / (1024 * 1024)) + " MB");
+                    java.util.HashMap<String, Object> ev = new java.util.HashMap<>();
+                    ev.put("percent", percent);
+                    ev.put("sent", sent);
+                    ev.put("total", total);
+                    ev.put("name", name == null ? "video" : name);
+                    send("uploadProgress", ev);
                 }
             }
             in.close();
@@ -198,7 +204,11 @@ public class UploadService extends Service {
             }
 
             finish("Upload complete — encoding starts now");
-            send("uploadDone", "https://iframe.andromedans.live/e/" + publicId);
+            java.util.HashMap<String, Object> doneEv = new java.util.HashMap<>();
+            doneEv.put("url", "https://iframe.andromedans.live/e/" + publicId);
+            doneEv.put("name", name == null ? "video" : name);
+            doneEv.put("total", total);
+            send("uploadDone", doneEv);
 
         } catch (Throwable t) {
             finish("Upload failed");
