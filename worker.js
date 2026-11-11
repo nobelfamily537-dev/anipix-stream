@@ -194,6 +194,34 @@ function isHttp(url) {
   return typeof url === 'string' && /^https?:\/\//i.test(url);
 }
 
+/* Telegram can only fetch public http(s) images. Thumbnails stored as base64
+   data URIs are decoded here and uploaded as a file instead. */
+async function sendPhotoSmart(env, chat, photoSrc, caption, kb) {
+  if (isHttp(photoSrc)) {
+    return tg(env, 'sendPhoto', {
+      chat_id: chat, photo: photoSrc, caption, parse_mode: 'HTML', reply_markup: kb,
+    });
+  }
+  const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(String(photoSrc || ''));
+  if (!m) return false;
+  try {
+    const bin = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0));
+    const fd = new FormData();
+    fd.append('chat_id', chat);
+    fd.append('caption', caption);
+    fd.append('parse_mode', 'HTML');
+    fd.append('reply_markup', JSON.stringify(kb));
+    fd.append('photo', new Blob([bin], { type: 'image/jpeg' }), 'cover.jpg');
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      body: fd,
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 function captionFor(playlist, eps) {
   const nums = eps.map((e) => e.n).sort((a, b) => a - b);
   const range = nums.length === 1 ? `EPISODE ${nums[0]}` : `EPISODE ${nums[0]}-${nums[nums.length - 1]}`;
@@ -242,18 +270,8 @@ async function notifyTelegram(env, lib, newEps) {
       ],
     };
 
-    const photo = isHttp(playlist.banner) ? playlist.banner
-                : (isHttp(playlist.thumb) ? playlist.thumb : '');
-    let sent = false;
-    if (photo) {
-      sent = await tg(env, 'sendPhoto', {
-        chat_id: chat,
-        photo,
-        caption,
-        parse_mode: 'HTML',
-        reply_markup: buttons,
-      });
-    }
+    const photo = isHttp(playlist.banner) ? playlist.banner : (playlist.thumb || playlist.banner || '');
+    const sent = photo ? await sendPhotoSmart(env, chat, photo, caption, buttons) : false;
     if (!sent) {
       await tg(env, 'sendMessage', {
         chat_id: chat,
@@ -457,10 +475,12 @@ export default {
           [{ text: '💬 Join Our Group', url: GROUP_URL }],
         ] };
 
-        const photo = isHttp(pl.banner) ? pl.banner : (isHttp(pl.thumb) ? pl.thumb : '');
+        const photo = isHttp(pl.banner) ? pl.banner : (pl.thumb || pl.banner || '');
         if (photo) {
-          method = 'sendPhoto';
-          payload = { chat_id: chat, photo, caption, parse_mode: 'HTML', reply_markup: kb };
+          const okPhoto = await sendPhotoSmart(env, chat, photo, caption, kb);
+          if (okPhoto) return json(JSON.stringify({ ok: true, method: 'sendPhoto', chat, photo: photo.startsWith('data:') ? 'base64 upload' : photo }));
+          method = 'sendMessage';
+          payload = { chat_id: chat, text: caption, parse_mode: 'HTML', reply_markup: kb };
         } else {
           payload = { chat_id: chat, text: caption, parse_mode: 'HTML', reply_markup: kb };
         }
