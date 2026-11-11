@@ -1,5 +1,5 @@
 {
-  "version": "2.5.2",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.5.2/app-release.apk",
-  "notes": "App page and Telegram buttons on the update screen"
+  "version": "2.6.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.6.0/app-release.apk",
+  "notes": "Keys survive reinstall (Android auto backup) + backup/restore code"
 }

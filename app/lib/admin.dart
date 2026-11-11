@@ -1126,6 +1126,98 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
     super.dispose();
   }
 
+  Future<void> _backup(BuildContext context) async {
+    final accs = await UfoloadService.accounts();
+    final data = {
+      'publishKey': AdminService.currentKey,
+      'accounts': accs.map((a) => {'name': a.name, 'key': a.key}).toList(),
+    };
+    final code = base64Encode(utf8.encode(jsonEncode(data)));
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Backup code', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Isse kahin save kar lo (notes, Telegram saved messages).',
+                style: TextStyle(fontSize: 12, color: kMuted)),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: kSurface2,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kLine),
+              ),
+              child: SelectableText(code,
+                  maxLines: 6,
+                  style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: kText)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: code));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Copied — save it somewhere safe.')),
+              );
+            },
+            child: const Text('Copy'),
+          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _restore(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Restore keys', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 4,
+          style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+          decoration: const InputDecoration(hintText: 'Paste the backup code', isDense: true),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Restore')),
+        ],
+      ),
+    );
+    if (go != true) return;
+    try {
+      final j = jsonDecode(utf8.decode(base64Decode(ctrl.text.trim())));
+      final list = <UfoAccount>[];
+      for (final a in (j['accounts'] as List? ?? const [])) {
+        if (a is Map) list.add(UfoAccount(name: (a['name'] ?? 'Account').toString(), key: (a['key'] ?? '').toString()));
+      }
+      await UfoloadService.saveAccounts(list);
+      final pk = (j['publishKey'] ?? '').toString();
+      if (pk.isNotEmpty) await AdminService.saveKey(pk);
+      if (!mounted) return;
+      setState(() => _ufo = list);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Restored ${list.length} account(s).')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid backup code.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -1363,6 +1455,45 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
                 ],
               ),
             ),
+        const SizedBox(height: 22),
+        const Text('Backup & restore',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text(
+          'Reinstall karne par Android app ka data delete kar deta hai. Yeh code save kar lo — '
+          'naye install par paste karke saari keys wapas aa jayengi.',
+          style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.4),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: kBrand.withOpacity(0.55)),
+                  foregroundColor: kBrand,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.save_alt, size: 17),
+                label: const Text('Backup keys', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                onPressed: () => _backup(context),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: kBrand.withOpacity(0.55)),
+                  foregroundColor: kBrand,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.restore, size: 17),
+                label: const Text('Restore keys', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                onPressed: () => _restore(context),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 26),
         const Text('About the app icon',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),

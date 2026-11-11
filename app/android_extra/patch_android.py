@@ -89,6 +89,11 @@ def patch_manifest():
         m = re.sub(r'(<application[^>]*>)',
                    r'\1\n        <service android:name=".UploadService" android:exported="false" android:foregroundServiceType="dataSync" />',
                    m, count=1)
+    # --- keep keys across reinstall (Android auto backup) ---
+    if 'android:allowBackup' not in m:
+        m = re.sub(r'(<application[^>]*?)(\s*>)',
+                   r'\1 android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules"\2',
+                   m, count=1)
     if 'supportsPictureInPicture' not in m:
         m, n_pip = re.subn(r'(<activity[^>]*?android:name="\.MainActivity")',
                            r'\1\n            android:supportsPictureInPicture="true"',
@@ -108,12 +113,37 @@ def patch_manifest():
             print('   ', line.strip())
 
 
+def write_backup_rules():
+    import os
+    d = os.path.join(BASE, 'src', 'main', 'res', 'xml')
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, 'backup_rules.xml'), 'w', encoding='utf-8') as f:
+        f.write('''<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="sharedpref" path="."/>
+</full-backup-content>
+''')
+    with open(os.path.join(d, 'data_extraction_rules.xml'), 'w', encoding='utf-8') as f:
+        f.write('''<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="."/>
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="."/>
+    </device-transfer>
+</data-extraction-rules>
+''')
+    print('backup rules written')
+
+
 def main():
     if not os.path.isdir(BASE):
         print('!! android folder missing:', BASE)
         sys.exit(1)
     patch_gradle()
     patch_manifest()
+    write_backup_rules()
 
 
 if __name__ == '__main__':
