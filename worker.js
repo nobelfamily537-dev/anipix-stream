@@ -168,6 +168,8 @@ async function handleLibrary(request, env) {
 /* ---------------- Telegram channel poster ---------------- */
 const SITE = 'https://anipix-stream.animeloverclipedits.workers.dev';
 const TG_CHAT_DEFAULT = '@Anipix_stream';
+const APP_URL = 'https://anipix.itch.io/anipix-stream';
+const GROUP_URL = 'https://t.me/lovelyanime2025';
 
 async function tg(env, method, payload) {
   if (!env.TELEGRAM_TOKEN) return false;
@@ -234,16 +236,19 @@ async function notifyTelegram(env, lib, newEps) {
     const buttons = {
       inline_keyboard: [
         [{ text: '🍿 Watch & Download', url }],
-        [{ text: '📱 Open in Mobile App', url: 'https://anipix.itch.io/anipix-stream' }],
         [{ text: '▶️ Watch Online', url }],
+        [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
+        [{ text: '💬 Join Our Group', url: GROUP_URL }],
       ],
     };
 
+    const photo = isHttp(playlist.banner) ? playlist.banner
+                : (isHttp(playlist.thumb) ? playlist.thumb : '');
     let sent = false;
-    if (isHttp(playlist.thumb)) {
+    if (photo) {
       sent = await tg(env, 'sendPhoto', {
         chat_id: chat,
-        photo: playlist.thumb,
+        photo,
         caption,
         parse_mode: 'HTML',
         reply_markup: buttons,
@@ -404,18 +409,81 @@ export default {
       if (!env.TELEGRAM_TOKEN) return json(JSON.stringify({ ok: false, error: 'TELEGRAM_TOKEN missing' }));
 
       const chat = env.TELEGRAM_CHAT || TG_CHAT_DEFAULT;
-      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
+      const wantPlaylist = url.searchParams.get('playlist');
+
+      let payload;
+      let method = 'sendMessage';
+
+      if (wantPlaylist) {
+        let lib = {};
+        try {
+          const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/library.json?t=${Date.now()}`);
+          if (r.ok) lib = await r.json();
+        } catch (e) { lib = {}; }
+
+        const playlists = lib.playlists || [];
+        const eps = lib.episodes || [];
+        const pl = playlists.find((p) => p.id === wantPlaylist)
+                || playlists.find((p) => String(p.title || '').toLowerCase().includes(String(wantPlaylist).toLowerCase()));
+
+        if (!pl) return json(JSON.stringify({ ok: false, error: 'playlist not found', playlists: playlists.map((p) => p.title) }));
+
+        const mine = eps.filter((e) => e.playlistId === pl.id).sort((a, b) => (a.season - b.season) || (a.n - b.n));
+        if (!mine.length) return json(JSON.stringify({ ok: false, error: 'this playlist has no episodes' }));
+
+        const seasons = [...new Set(mine.map((e) => e.season))];
+        const nums = mine.map((e) => String(e.n).padStart(2, '0'));
+        const audio = (pl.audio && pl.audio.length ? pl.audio : ['Hindi']).join(' • ');
+        const genre = (pl.genres || []).slice(0, 6).join(' • ');
+        const quality = [...new Set(mine.flatMap((e) => (e.sources || []).map((x) => x.q)).filter(Boolean))].join(' • ');
+        const url2 = `${SITE}/#/detail/${pl.id}`;
+
+        const caption = [
+          `🎬 <b>${esc(pl.title)}</b>`,
+          '',
+          `📺 <b>Season:</b> ${seasons.join(', ')}`,
+          `🎞 <b>Episodes:</b> ${nums.join(', ')}  <i>(${mine.length} total)</i>`,
+          genre ? `🎭 <b>Genre:</b> ${esc(genre)}` : '',
+          `🔊 <b>Audio:</b> ${esc(audio)}`,
+          quality ? `📹 <b>Quality:</b> ${esc(quality)}` : '',
+          '',
+          '▶️ <b>Watch now on AniPix Stream</b>',
+        ].filter(Boolean).join('\n');
+
+        const kb = { inline_keyboard: [
+          [{ text: '🍿 Watch & Download', url: url2 }],
+          [{ text: '▶️ Watch Online', url: url2 }],
+          [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
+          [{ text: '💬 Join Our Group', url: GROUP_URL }],
+        ] };
+
+        const photo = isHttp(pl.banner) ? pl.banner : (isHttp(pl.thumb) ? pl.thumb : '');
+        if (photo) {
+          method = 'sendPhoto';
+          payload = { chat_id: chat, photo, caption, parse_mode: 'HTML', reply_markup: kb };
+        } else {
+          payload = { chat_id: chat, text: caption, parse_mode: 'HTML', reply_markup: kb };
+        }
+      } else {
+        payload = {
           chat_id: chat,
           text: '✅ <b>AniPix Stream</b>\n\nBot connected. Naya episode publish karte hi post yahan aayega.',
           parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: [[{ text: '▶️ Open AniPix Stream', url: SITE }]] },
-        }),
+          reply_markup: { inline_keyboard: [
+            [{ text: '▶️ Open AniPix Stream', url: SITE }],
+            [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
+            [{ text: '💬 Join Our Group', url: GROUP_URL }],
+          ] },
+        };
+      }
+
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/${method}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       const body = await res.text();
-      return json(JSON.stringify({ ok: res.ok, chat, telegram: body.slice(0, 500) }));
+      return json(JSON.stringify({ ok: res.ok, method, chat, telegram: body.slice(0, 400) }));
     }
     if (url.pathname === '/api/media') return handleMedia(request, env);
     if (url.pathname === '/api/view') return handleView(request, env);
