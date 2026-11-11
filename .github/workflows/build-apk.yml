@@ -43,7 +43,7 @@ jobs:
           python3 app/android_extra/patch_android.py
           find app/android/app/src/main -name "MainActivity.kt" -delete
           mkdir -p app/android/app/src/main/java/com/anipixstream/anipix_stream
-          cp app/android_extra/MainActivity.java app/android/app/src/main/java/com/anipixstream/anipix_stream/MainActivity.java
+          cp app/android_extra/*.java app/android/app/src/main/java/com/anipixstream/anipix_stream/
           echo "--- java files ---"
           find app/android/app/src/main -name "MainActivity.*"
 
