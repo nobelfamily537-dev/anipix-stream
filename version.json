@@ -1,5 +1,5 @@
 {
-  "version": "2.3.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.3.0/app-release.apk",
-  "notes": "Upload progress % with a notification, faster raw upload, itch.io share link"
+  "version": "2.4.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.4.0/app-release.apk",
+  "notes": "PiP, report a broken episode, and the app now requires the latest version"
 }

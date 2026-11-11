@@ -17,6 +17,9 @@ import 'ui.dart';
 class AdminService {
   static const String _keyPref = 'anipix_publish_key';
 
+  /// Latest key typed in the admin screen (used by the reports list).
+  static String currentKey = '';
+
   static Future<String?> savedKey() async {
     final p = await SharedPreferences.getInstance();
     final k = p.getString(_keyPref);
@@ -237,7 +240,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   void initState() {
     super.initState();
     AdminService.savedKey().then((k) {
-      if (k != null && mounted && _key.text.isEmpty) setState(() => _key.text = k);
+      if (k != null && mounted && _key.text.isEmpty) {
+        setState(() => _key.text = k);
+        AdminService.currentKey = k;
+      }
     });
     _key.addListener(_scheduleSave);
   }
@@ -246,6 +252,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     _keyTimer?.cancel();
     _keyTimer = Timer(const Duration(milliseconds: 500), () {
       final v = _key.text.trim();
+      AdminService.currentKey = v;
       if (v.isNotEmpty) AdminService.saveKey(v);
     });
   }
@@ -1098,6 +1105,7 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
   final _accKey = TextEditingController();
   List<UfoAccount> _ufo = [];
   bool _ufoLoaded = false;
+  List<Map<String, dynamic>> _reports = [];
   late String _heroId = widget.lib.home.heroId;
 
   @override
@@ -1314,6 +1322,47 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
             },
           ),
         ),
+        const SizedBox(height: 30),
+        Row(
+          children: [
+            const Text('Broken link reports',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+            const Spacer(),
+            TextButton(
+              onPressed: () async {
+                final r = await Api.fetchReports(AdminService.currentKey);
+                if (mounted) setState(() => _reports = r);
+              },
+              child: const Text('Load', style: TextStyle(fontSize: 12, color: kBrand)),
+            ),
+          ],
+        ),
+        if (_reports.isEmpty)
+          const Text('No reports loaded. Tap Load.',
+              style: TextStyle(fontSize: 11.5, color: kMuted))
+        else
+          for (final r in _reports.take(20))
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: kSurface2,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kLine),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${r['playlistId']} · ${r['episodeId']}',
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                  if ((r['note'] ?? '').toString().isNotEmpty)
+                    Text(r['note'].toString(),
+                        style: const TextStyle(fontSize: 11, color: kMuted)),
+                  Text(r['at'].toString(),
+                      style: const TextStyle(fontSize: 10, color: kMuted)),
+                ],
+              ),
+            ),
         const SizedBox(height: 26),
         const Text('About the app icon',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),

@@ -18,9 +18,49 @@ const String kShareText =
     'Download the app: $kAppUrl';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '2.3.0';
+const String kAppVersion = '2.4.0';
 
 class Api {
+  /// Tells the admin that an episode does not play.
+  static Future<bool> sendReport({
+    required String playlistId,
+    required String episodeId,
+    String note = '',
+  }) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$kBaseUrl/api/report'),
+            headers: {'content-type': 'application/json'},
+            body: jsonEncode({
+              'playlistId': playlistId,
+              'episodeId': episodeId,
+              'note': note,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Admin: the list of reports.
+  static Future<List<Map<String, dynamic>>> fetchReports(String key) async {
+    try {
+      final res = await http
+          .get(Uri.parse('$kBaseUrl/api/report?key=$key'))
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return [];
+      final j = jsonDecode(res.body);
+      final list = (j is Map) ? j['reports'] : null;
+      if (list is! List) return [];
+      return list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Fire-and-forget view counter (Cloudflare KV). Safe to ignore failures.
   static void countView(String episodeId) {
     try {

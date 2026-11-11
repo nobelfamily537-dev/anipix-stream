@@ -4,6 +4,9 @@ import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.app.PictureInPictureParams;
+import android.util.Rational;
 import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Bundle;
@@ -57,6 +60,13 @@ public class MainActivity extends FlutterActivity {
                         showFullScreen(StartAppAd.AdMode.AUTOMATIC, result);
                     } else if ("rewarded".equals(call.method)) {
                         showFullScreen(StartAppAd.AdMode.REWARDED_VIDEO, result);
+                    } else if ("pip".equals(call.method)) {
+                        try {
+                            boolean ok = enterPipMode();
+                            result.success(ok);
+                        } catch (Throwable t) {
+                            result.success(false);
+                        }
                     } else if ("share".equals(call.method)) {
                         final String text = call.argument("text");
                         try {
@@ -128,6 +138,32 @@ public class MainActivity extends FlutterActivity {
             });
         } catch (Throwable t) {
             result.success(false);
+        }
+    }
+
+    /* ---------------- picture in picture ---------------- */
+
+    private boolean enterPipMode() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false;
+        try {
+            PictureInPictureParams.Builder b = new PictureInPictureParams.Builder();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                b.setAspectRatio(new Rational(16, 9));
+            }
+            enterPictureInPictureMode(b.build());
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPip, Configuration config) {
+        super.onPictureInPictureModeChanged(isInPip, config);
+        try {
+            final MethodChannel ch = channel;
+            if (ch != null) ch.invokeMethod(isInPip ? "pipOn" : "pipOff", null);
+        } catch (Throwable ignored) {
         }
     }
 

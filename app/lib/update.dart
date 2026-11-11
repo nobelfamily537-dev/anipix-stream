@@ -209,3 +209,114 @@ class UpdateBanner extends StatelessWidget {
     );
   }
 }
+
+/// Blocks the whole app until the newer build is installed.
+class UpdateGate extends StatefulWidget {
+  final UpdateInfo info;
+  const UpdateGate({super.key, required this.info});
+
+  @override
+  State<UpdateGate> createState() => _UpdateGateState();
+}
+
+class _UpdateGateState extends State<UpdateGate> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _update() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final ok = await installUpdate(widget.info);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (!ok) _error = 'Download did not start. Tap Update again, or check your connection.';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kBg,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 92,
+                  height: 92,
+                  decoration: BoxDecoration(
+                    color: kSurface2,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: kLine),
+                  ),
+                  child: const Icon(Icons.system_update, size: 42, color: kBrand),
+                ),
+                const SizedBox(height: 24),
+                const Text('Update required',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 10),
+                Text(
+                  'A new version of AniPix Stream is available.\nYou are on v$kAppVersion — install v${widget.info.version} to keep watching.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: kMuted, height: 1.5),
+                ),
+                if (widget.info.notes.trim().isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: kSurface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: kLine),
+                    ),
+                    child: Text(widget.info.notes.trim(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFFB9B9C7), height: 1.45)),
+                  ),
+                ],
+                const SizedBox(height: 26),
+                SizedBox(
+                  height: 50,
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kBrand,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _busy ? null : _update,
+                    child: _busy
+                        ? const SizedBox(
+                            width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Update now',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFFFF9D9D))),
+                ],
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () async {
+                    await openUpdate(widget.info);
+                  },
+                  child: const Text('Download in browser instead',
+                      style: TextStyle(fontSize: 12, color: kMuted)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

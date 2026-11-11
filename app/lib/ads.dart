@@ -17,6 +17,16 @@ class Ads {
     }
   }
 
+  /// Shrinks the app into a floating window (Android 8+).
+  static Future<bool> enterPip() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _ch.invokeMethod<bool>('pip') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Rewarded video when an episode is opened.
   static Future<bool> rewarded() async {
     if (!Platform.isAndroid) return false;

@@ -31,6 +31,7 @@ class _AniPixAppState extends State<AniPixApp> {
   bool _splash = true;
   bool _autoRetried = false;
   int _tab = 0;
+  UpdateInfo? _mustUpdate;
 
   @override
   void initState() {
@@ -45,11 +46,10 @@ class _AniPixAppState extends State<AniPixApp> {
 
   Future<void> _checkUpdate() async {
     final info = await UpdateService.check();
-    if (info == null || !mounted) return;
-    await Future<void>.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
-    final ctx = _navKey.currentContext;
-    if (ctx != null) showUpdateDialog(ctx, info);
+    if (info == null) return;
+    /* a newer build exists: the app stays locked until it is installed */
+    setState(() => _mustUpdate = info);
   }
 
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
@@ -102,7 +102,9 @@ class _AniPixAppState extends State<AniPixApp> {
         theme: buildTheme(),
         home: _splash
             ? const SplashScreen()
-            : Builder(
+            : (_mustUpdate != null
+                ? UpdateGate(info: _mustUpdate!)
+                : Builder(
                 builder: (context) => Scaffold(
                   body: IndexedStack(
                     index: _tab,
@@ -127,7 +129,7 @@ class _AniPixAppState extends State<AniPixApp> {
                     ],
                   ),
                 ),
-              ),
+              )),
       ),
     );
   }

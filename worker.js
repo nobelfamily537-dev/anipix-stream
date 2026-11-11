@@ -165,11 +165,79 @@ async function handleLibrary(request, env) {
   return json(JSON.stringify({ ok: false, error: 'Method not allowed' }), 405);
 }
 
+/* ---------------- broken link reports ---------------- */
+const REPORTS_PATH = 'reports.json';
+
+async function readReports(env) {
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPORTS_PATH}?t=${Date.now()}`);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return Array.isArray(j) ? j : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function writeReports(env, list) {
+  const headers = {
+    authorization: `Bearer ${env.GITHUB_TOKEN}`,
+    accept: 'application/vnd.github+json',
+    'user-agent': 'anipix-reports',
+    'content-type': 'application/json',
+  };
+  const api = `https://api.github.com/repos/${REPO}/contents/${REPORTS_PATH}`;
+  let sha;
+  try {
+    const cur = await fetch(api, { headers });
+    if (cur.ok) sha = (await cur.json()).sha;
+  } catch (e) { /* ignore */ }
+  await fetch(api, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      message: 'report: broken link',
+      content: toBase64(JSON.stringify(list)),
+      branch: BRANCH,
+      ...(sha ? { sha } : {}),
+    }),
+  });
+}
+
+async function handleReport(request, env, url) {
+  if (request.method === 'GET') {
+    const key = url.searchParams.get('key') || '';
+    const kh = key ? await sha256Hex(key) : '';
+    if (!((env.PUBLISH_KEY && key === env.PUBLISH_KEY) || kh === PUBLISH_KEY_SHA256)) {
+      return json(JSON.stringify({ ok: false, error: 'wrong key' }), 401);
+    }
+    const list = await readReports(env);
+    return json(JSON.stringify({ ok: true, reports: list.slice(-100).reverse() }));
+  }
+
+  if (request.method !== 'POST') return json(JSON.stringify({ ok: false, error: 'POST only' }), 405);
+  if (!env.GITHUB_TOKEN) return json(JSON.stringify({ ok: false, error: 'GITHUB_TOKEN missing' }), 500);
+
+  let body;
+  try { body = await request.json(); } catch (e) { body = null; }
+  if (!body || !body.episodeId) return json(JSON.stringify({ ok: false, error: 'episodeId required' }), 400);
+
+  const list = await readReports(env);
+  const entry = {
+    id: 'r' + Date.now(),
+    playlistId: String(body.playlistId || ''),
+    episodeId: String(body.episodeId || ''),
+    note: String(body.note || '').slice(0, 300),
+    at: new Date().toISOString(),
+  };
+  list.push(entry);
+  await writeReports(env, list.slice(-200));
+  return json(JSON.stringify({ ok: true }));
+}
+
 /* ---------------- Telegram channel poster ---------------- */
 const SITE = 'https://anipix-stream.animeloverclipedits.workers.dev';
 const TG_CHAT_DEFAULT = '@Anipix_stream';
-const APP_URL = 'https://anipix.itch.io/anipix-stream';
-const GROUP_URL = 'https://t.me/lovelyanime2025';
 
 async function tg(env, method, payload) {
   if (!env.TELEGRAM_TOKEN) return false;
@@ -192,34 +260,6 @@ function esc(s) {
 
 function isHttp(url) {
   return typeof url === 'string' && /^https?:\/\//i.test(url);
-}
-
-/* Telegram can only fetch public http(s) images. Thumbnails stored as base64
-   data URIs are decoded here and uploaded as a file instead. */
-async function sendPhotoSmart(env, chat, photoSrc, caption, kb) {
-  if (isHttp(photoSrc)) {
-    return tg(env, 'sendPhoto', {
-      chat_id: chat, photo: photoSrc, caption, parse_mode: 'HTML', reply_markup: kb,
-    });
-  }
-  const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(String(photoSrc || ''));
-  if (!m) return false;
-  try {
-    const bin = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0));
-    const fd = new FormData();
-    fd.append('chat_id', chat);
-    fd.append('caption', caption);
-    fd.append('parse_mode', 'HTML');
-    fd.append('reply_markup', JSON.stringify(kb));
-    fd.append('photo', new Blob([bin], { type: 'image/jpeg' }), 'cover.jpg');
-    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendPhoto`, {
-      method: 'POST',
-      body: fd,
-    });
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
 }
 
 function captionFor(playlist, eps) {
@@ -264,14 +304,21 @@ async function notifyTelegram(env, lib, newEps) {
     const buttons = {
       inline_keyboard: [
         [{ text: '🍿 Watch & Download', url }],
+        [{ text: '📱 Open in Mobile App', url: 'https://anipix.itch.io/anipix-stream' }],
         [{ text: '▶️ Watch Online', url }],
-        [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
-        [{ text: '💬 Join Our Group', url: GROUP_URL }],
       ],
     };
 
-    const photo = isHttp(playlist.banner) ? playlist.banner : (playlist.thumb || playlist.banner || '');
-    const sent = photo ? await sendPhotoSmart(env, chat, photo, caption, buttons) : false;
+    let sent = false;
+    if (isHttp(playlist.thumb)) {
+      sent = await tg(env, 'sendPhoto', {
+        chat_id: chat,
+        photo: playlist.thumb,
+        caption,
+        parse_mode: 'HTML',
+        reply_markup: buttons,
+      });
+    }
     if (!sent) {
       await tg(env, 'sendMessage', {
         chat_id: chat,
@@ -427,84 +474,20 @@ export default {
       if (!env.TELEGRAM_TOKEN) return json(JSON.stringify({ ok: false, error: 'TELEGRAM_TOKEN missing' }));
 
       const chat = env.TELEGRAM_CHAT || TG_CHAT_DEFAULT;
-      const wantPlaylist = url.searchParams.get('playlist');
-
-      let payload;
-      let method = 'sendMessage';
-
-      if (wantPlaylist) {
-        let lib = {};
-        try {
-          const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/library.json?t=${Date.now()}`);
-          if (r.ok) lib = await r.json();
-        } catch (e) { lib = {}; }
-
-        const playlists = lib.playlists || [];
-        const eps = lib.episodes || [];
-        const pl = playlists.find((p) => p.id === wantPlaylist)
-                || playlists.find((p) => String(p.title || '').toLowerCase().includes(String(wantPlaylist).toLowerCase()));
-
-        if (!pl) return json(JSON.stringify({ ok: false, error: 'playlist not found', playlists: playlists.map((p) => p.title) }));
-
-        const mine = eps.filter((e) => e.playlistId === pl.id).sort((a, b) => (a.season - b.season) || (a.n - b.n));
-        if (!mine.length) return json(JSON.stringify({ ok: false, error: 'this playlist has no episodes' }));
-
-        const seasons = [...new Set(mine.map((e) => e.season))];
-        const nums = mine.map((e) => String(e.n).padStart(2, '0'));
-        const audio = (pl.audio && pl.audio.length ? pl.audio : ['Hindi']).join(' • ');
-        const genre = (pl.genres || []).slice(0, 6).join(' • ');
-        const quality = [...new Set(mine.flatMap((e) => (e.sources || []).map((x) => x.q)).filter(Boolean))].join(' • ');
-        const url2 = `${SITE}/#/detail/${pl.id}`;
-
-        const caption = [
-          `🎬 <b>${esc(pl.title)}</b>`,
-          '',
-          `📺 <b>Season:</b> ${seasons.join(', ')}`,
-          `🎞 <b>Episodes:</b> ${nums.join(', ')}  <i>(${mine.length} total)</i>`,
-          genre ? `🎭 <b>Genre:</b> ${esc(genre)}` : '',
-          `🔊 <b>Audio:</b> ${esc(audio)}`,
-          quality ? `📹 <b>Quality:</b> ${esc(quality)}` : '',
-          '',
-          '▶️ <b>Watch now on AniPix Stream</b>',
-        ].filter(Boolean).join('\n');
-
-        const kb = { inline_keyboard: [
-          [{ text: '🍿 Watch & Download', url: url2 }],
-          [{ text: '▶️ Watch Online', url: url2 }],
-          [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
-          [{ text: '💬 Join Our Group', url: GROUP_URL }],
-        ] };
-
-        const photo = isHttp(pl.banner) ? pl.banner : (pl.thumb || pl.banner || '');
-        if (photo) {
-          const okPhoto = await sendPhotoSmart(env, chat, photo, caption, kb);
-          if (okPhoto) return json(JSON.stringify({ ok: true, method: 'sendPhoto', chat, photo: photo.startsWith('data:') ? 'base64 upload' : photo }));
-          method = 'sendMessage';
-          payload = { chat_id: chat, text: caption, parse_mode: 'HTML', reply_markup: kb };
-        } else {
-          payload = { chat_id: chat, text: caption, parse_mode: 'HTML', reply_markup: kb };
-        }
-      } else {
-        payload = {
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
           chat_id: chat,
           text: '✅ <b>AniPix Stream</b>\n\nBot connected. Naya episode publish karte hi post yahan aayega.',
           parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: [
-            [{ text: '▶️ Open AniPix Stream', url: SITE }],
-            [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
-            [{ text: '💬 Join Our Group', url: GROUP_URL }],
-          ] },
-        };
-      }
-
-      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/${method}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
+          reply_markup: { inline_keyboard: [[{ text: '▶️ Open AniPix Stream', url: SITE }]] },
+        }),
       });
       const body = await res.text();
-      return json(JSON.stringify({ ok: res.ok, method, chat, telegram: body.slice(0, 400) }));
+      return json(JSON.stringify({ ok: res.ok, chat, telegram: body.slice(0, 500) }));
     }
+    if (url.pathname === '/api/report') return handleReport(request, env, url);
     if (url.pathname === '/api/media') return handleMedia(request, env);
     if (url.pathname === '/api/view') return handleView(request, env);
     if (url.pathname === '/api/vast') return handleVast(request);

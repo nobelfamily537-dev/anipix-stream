@@ -89,6 +89,9 @@ def patch_manifest():
         m = re.sub(r'(<application[^>]*>)',
                    r'\1\n        <service android:name=".UploadService" android:exported="false" android:foregroundServiceType="dataSync" />',
                    m, count=1)
+    if 'supportsPictureInPicture' not in m:
+        m = m.replace('<activity android:name=".MainActivity"',
+                      '<activity android:name=".MainActivity"\n            android:supportsPictureInPicture="true"\n            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"', 1)
     if 'REQUEST_INSTALL_PACKAGES' not in m:
         m = re.sub(r'(<application[^>]*>)',
                    r'<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>\n    \1', m, count=1)

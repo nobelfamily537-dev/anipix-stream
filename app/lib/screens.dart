@@ -1113,6 +1113,50 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 
+  Future<void> _reportEpisode(BuildContext context) async {
+    final note = TextEditingController();
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Report this episode', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Video not playing, wrong episode or bad quality? Tell us.',
+                style: TextStyle(fontSize: 12.5, color: kMuted, height: 1.4)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: note,
+              maxLines: 3,
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(hintText: 'What is wrong? (optional)', isDense: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send report')),
+        ],
+      ),
+    );
+    if (send != true) return;
+
+    final ok = await Api.sendReport(
+      playlistId: widget.playlist.id,
+      episodeId: _episode.id,
+      note: note.text.trim(),
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Report sent — thank you!' : 'Could not send. Check your connection.'),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Widget _pillButton({
     required IconData icon,
     required String label,
@@ -1184,9 +1228,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 Text('Season ${ep.season} · Episode ${ep.n}${ep.title.isNotEmpty ? ' · ${ep.title}' : ''}',
                     style: const TextStyle(fontSize: 12, color: kMuted)),
 
-                /* like / share / watchlist */
+                /* like / share / watchlist / pip / report */
                 const SizedBox(height: 12),
-                Row(
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
                   children: [
                     _pillButton(
                       icon: Store.i.isLiked(widget.playlist.id) ? Icons.favorite : Icons.favorite_border,
@@ -1221,7 +1267,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         setState(() {});
                       },
                     ),
+                    const SizedBox(width: 8),
+                    _pillButton(
+                      icon: Icons.picture_in_picture_alt,
+                      label: 'PiP',
+                      onTap: () async {
+                        final ok = await Ads.enterPip();
+                        if (!ok && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Picture-in-Picture needs Android 8 or newer.'),
+                                duration: Duration(seconds: 2)),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _pillButton(
+                      icon: Icons.flag_outlined,
+                      label: 'Report',
+                      onTap: () => _reportEpisode(context),
+                    ),
                   ],
+                  ),
                 ),
 
                 /* quick episode switcher, Moviebox style */
