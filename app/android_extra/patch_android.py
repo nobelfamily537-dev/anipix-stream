@@ -90,8 +90,12 @@ def patch_manifest():
                    r'\1\n        <service android:name=".UploadService" android:exported="false" android:foregroundServiceType="dataSync" />',
                    m, count=1)
     if 'supportsPictureInPicture' not in m:
-        m = m.replace('<activity android:name=".MainActivity"',
-                      '<activity android:name=".MainActivity"\n            android:supportsPictureInPicture="true"\n            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"', 1)
+        m, n_pip = re.subn(r'(<activity[^>]*?android:name="\.MainActivity")',
+                           r'\1\n            android:supportsPictureInPicture="true"',
+                           m, count=1)
+        if n_pip == 0:
+            raise SystemExit('PATCH FAILED: could not add supportsPictureInPicture to MainActivity')
+        print('PiP enabled on MainActivity')
     if 'com.startapp.sdk.APPLICATION_ID' not in m:
         m = re.sub(r'(<application[^>]*>)',
                    r'\1\n        <meta-data android:name="com.startapp.sdk.APPLICATION_ID" '

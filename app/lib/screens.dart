@@ -1234,7 +1234,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         if (!ok && context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                                content: Text('Picture-in-Picture needs Android 8 or newer.'),
+                                content: Text('Picture-in-Picture is not available on this device.'),
                                 duration: Duration(seconds: 2)),
                           );
                         }
