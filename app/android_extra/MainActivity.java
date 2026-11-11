@@ -87,6 +87,7 @@ public class MainActivity extends FlutterActivity {
                             downloadAndInstall(url);
                             result.success(true);
                         } catch (Throwable t) {
+                            android.util.Log.e("AniPix", "install failed", t);
                             result.success(false);
                         }
                     } else {
@@ -204,7 +205,12 @@ public class MainActivity extends FlutterActivity {
                 startActivity(install);
             }
         };
-        registerReceiver(receiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(receiver, filter);
+        }
     }
 
     /* ---------------- banner ---------------- */

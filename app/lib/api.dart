@@ -18,7 +18,7 @@ const String kShareText =
     'Download the app: $kAppUrl';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '2.4.1';
+const String kAppVersion = '2.4.2';
 
 class Api {
   /// Tells the admin that an episode does not play.

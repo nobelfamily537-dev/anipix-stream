@@ -1,5 +1,5 @@
 {
-  "version": "2.4.1",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.4.1/app-release.apk",
-  "notes": "Cleaner detail page: the duplicate episode chips are gone"
+  "version": "2.4.2",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.4.2/app-release.apk",
+  "notes": "In-app update fixed on Android 13+"
 }
