@@ -123,9 +123,8 @@ Future<bool> installUpdate(UpdateInfo info) async {
   }
 }
 
+/// Opens the APK link in the browser — the user installs it from there.
 Future<void> openUpdate(UpdateInfo info) async {
-  /* first try the in-app download + installer, fall back to the browser */
-  if (await installUpdate(info)) return;
   final uri = Uri.parse(info.url);
   if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
     await launchUrl(uri);
@@ -228,11 +227,11 @@ class _UpdateGateState extends State<UpdateGate> {
       _busy = true;
       _error = null;
     });
-    final ok = await installUpdate(widget.info);
+    await openUpdate(widget.info);
     if (!mounted) return;
     setState(() {
       _busy = false;
-      if (!ok) _error = 'Download did not start. Tap Update again, or check your connection.';
+      _error = 'Browser khul gaya — APK download karke install karo, phir app kholo.';
     });
   }
 
@@ -305,12 +304,10 @@ class _UpdateGateState extends State<UpdateGate> {
                       style: const TextStyle(fontSize: 12, color: Color(0xFFFF9D9D))),
                 ],
                 const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () async {
-                    await openUpdate(widget.info);
-                  },
-                  child: const Text('Download in browser instead',
-                      style: TextStyle(fontSize: 12, color: kMuted)),
+                const Text(
+                  'Download hone ke baad APK install karo — app apne aap naya version dikhayega.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.4),
                 ),
               ],
             ),

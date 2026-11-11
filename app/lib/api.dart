@@ -14,11 +14,12 @@ const String kSupportUrl = 'https://t.me/lovelyanime2025';
 const String kAppUrl = 'https://anipix.itch.io/anipix-stream';
 
 const String kShareText =
-    '🎬 AniPix Stream — anime subbed & dubbed in HD\n'
-    'Download the app: $kAppUrl';
+    '🎬 AniPix Stream — anime subbed & dubbed in HD\n\n'
+    '📱 Download the app: $kAppUrl\n'
+    '💬 Join our Telegram: https://t.me/Anipix_stream';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '2.4.2';
+const String kAppVersion = '2.5.0';
 
 class Api {
   /// Tells the admin that an episode does not play.
