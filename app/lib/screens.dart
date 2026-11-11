@@ -690,48 +690,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ),
           ),
 
-          /* ---------- episode chips ---------- */
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 46,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                itemCount: seasonEps.length + 1,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, i) {
-                  final isAll = i == 0;
-                  final ep = isAll ? null : seasonEps[i - 1];
-                  return GestureDetector(
-                    onTap: () {
-                      if (ep == null) return;
-                      Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => PlayerScreen(
-                          playlist: playlist,
-                          episodes: eps,
-                          index: eps.indexOf(ep),
-                        ),
-                      ));
-                    },
-                    child: Container(
-                      width: isAll ? 58 : 72,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: kSurface2,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: kLine),
-                      ),
-                      child: Text(
-                        isAll ? 'All' : ep!.n.toString().padLeft(2, '0'),
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kText),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-
           /* ---------- episode list ---------- */
           SliverToBoxAdapter(
             child: Padding(

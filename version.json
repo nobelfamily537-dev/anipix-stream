@@ -1,5 +1,5 @@
 {
-  "version": "2.4.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.4.0/app-release.apk",
-  "notes": "PiP, report a broken episode, and the app now requires the latest version"
+  "version": "2.4.1",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.4.1/app-release.apk",
+  "notes": "Cleaner detail page: the duplicate episode chips are gone"
 }
