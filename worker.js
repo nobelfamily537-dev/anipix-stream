@@ -112,6 +112,15 @@ async function handleLibrary(request, env) {
       'content-type': 'application/json',
     };
 
+    /* snapshot the library before this publish so we can diff what is new */
+    let prevLib = {};
+    try {
+      const prevRes = await fetch(
+        `https://raw.githubusercontent.com/${REPO}/${BRANCH}/library.json?t=${Date.now()}`,
+        { headers: { 'user-agent': 'anipix-publish', 'cache-control': 'no-cache' } });
+      if (prevRes.ok) prevLib = await prevRes.json();
+    } catch (e) { prevLib = {}; }
+
     try {
       let sha;
       const current = await fetch(API_URL, { headers });
@@ -133,6 +142,15 @@ async function handleLibrary(request, env) {
         const detail = await put.text();
         return json(JSON.stringify({ ok: false, error: `GitHub ${put.status}: ${detail.slice(0, 180)}` }), 502);
       }
+      /* tell the Telegram channel about anything newly added */
+      try {
+        let next = {};
+        try { next = JSON.parse(body); } catch (e) { next = {}; }
+        const prevIds = new Set(((prevLib.episodes) || []).map((e) => e.id));
+        const fresh = ((next.episodes) || []).filter((e) => e && e.id && !prevIds.has(e.id));
+        if (fresh.length) await notifyTelegram(env, next, fresh);
+      } catch (e) { /* never block a publish */ }
+
       const out = await put.json();
       return json(JSON.stringify({
         ok: true,
@@ -145,6 +163,102 @@ async function handleLibrary(request, env) {
   }
 
   return json(JSON.stringify({ ok: false, error: 'Method not allowed' }), 405);
+}
+
+/* ---------------- Telegram channel poster ---------------- */
+const SITE = 'https://anipix-stream.animeloverclipedits.workers.dev';
+const TG_CHAT_DEFAULT = '@Anipix_stream';
+
+async function tg(env, method, payload) {
+  if (!env.TELEGRAM_TOKEN) return false;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function isHttp(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url);
+}
+
+function captionFor(playlist, eps) {
+  const nums = eps.map((e) => e.n).sort((a, b) => a - b);
+  const range = nums.length === 1 ? `EPISODE ${nums[0]}` : `EPISODE ${nums[0]}-${nums[nums.length - 1]}`;
+  const season = eps[0].season || 1;
+  const audio = (playlist.audio && playlist.audio.length ? playlist.audio : ['Hindi']).join(' • ');
+  const genre = (playlist.genres || []).slice(0, 6).join(' • ');
+  const title = playlist.title || 'New anime';
+  const quality = [...new Set(eps.flatMap((e) => (e.sources || []).map((x) => x.q)).filter(Boolean))].join(' • ');
+
+  const lines = [
+    `🔥✨ ${range} ADDED! ✨🔥`,
+    '',
+    `🎬 <b>Title:</b> ${esc(title)}`,
+    season > 1 ? `📺 <b>Season:</b> ${season}` : '',
+    genre ? `🎭 <b>Genre:</b> ${esc(genre)}` : '',
+    `🔊 <b>Audio:</b> ${esc(audio)}`,
+    quality ? `📹 <b>Quality:</b> ${esc(quality)}` : '',
+    '',
+    `▶️ <b>Watch now on AniPix Stream</b>`,
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
+async function notifyTelegram(env, lib, newEps) {
+  if (!env.TELEGRAM_TOKEN || !newEps.length) return;
+  const chat = env.TELEGRAM_CHAT || TG_CHAT_DEFAULT;
+
+  const byPlaylist = {};
+  for (const e of newEps) {
+    const pid = e.playlistId;
+    if (!pid) continue;
+    (byPlaylist[pid] = byPlaylist[pid] || []).push(e);
+  }
+
+  for (const [pid, eps] of Object.entries(byPlaylist)) {
+    const playlist = (lib.playlists || []).find((p) => p.id === pid) || {};
+    const url = `${SITE}/#/detail/${pid}`;
+    const caption = captionFor(playlist, eps);
+
+    const buttons = {
+      inline_keyboard: [
+        [{ text: '🍿 Watch & Download', url }],
+        [{ text: '📱 Open in Mobile App', url: 'https://anipix.itch.io/anipix-stream' }],
+        [{ text: '▶️ Watch Online', url }],
+      ],
+    };
+
+    let sent = false;
+    if (isHttp(playlist.thumb)) {
+      sent = await tg(env, 'sendPhoto', {
+        chat_id: chat,
+        photo: playlist.thumb,
+        caption,
+        parse_mode: 'HTML',
+        reply_markup: buttons,
+      });
+    }
+    if (!sent) {
+      await tg(env, 'sendMessage', {
+        chat_id: chat,
+        text: caption,
+        parse_mode: 'HTML',
+        reply_markup: buttons,
+        disable_web_page_preview: false,
+      });
+    }
+  }
 }
 
 /* ---------------- media upload (thumbnails / banners) ---------------- */
