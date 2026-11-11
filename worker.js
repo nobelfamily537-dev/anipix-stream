@@ -396,6 +396,27 @@ export default {
         version: 'v1.6',
       }));
     }
+    if (url.pathname === '/api/test-tg') {
+      const key = url.searchParams.get('key') || '';
+      const kh = key ? await sha256Hex(key) : '';
+      const okKey = (env.PUBLISH_KEY && key === env.PUBLISH_KEY) || kh === PUBLISH_KEY_SHA256;
+      if (!okKey) return json(JSON.stringify({ ok: false, error: 'wrong key' }), 401);
+      if (!env.TELEGRAM_TOKEN) return json(JSON.stringify({ ok: false, error: 'TELEGRAM_TOKEN missing' }));
+
+      const chat = env.TELEGRAM_CHAT || TG_CHAT_DEFAULT;
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chat,
+          text: '✅ <b>AniPix Stream</b>\n\nBot connected. Naya episode publish karte hi post yahan aayega.',
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: [[{ text: '▶️ Open AniPix Stream', url: SITE }]] },
+        }),
+      });
+      const body = await res.text();
+      return json(JSON.stringify({ ok: res.ok, chat, telegram: body.slice(0, 500) }));
+    }
     if (url.pathname === '/api/media') return handleMedia(request, env);
     if (url.pathname === '/api/view') return handleView(request, env);
     if (url.pathname === '/api/vast') return handleVast(request);
