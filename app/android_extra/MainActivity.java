@@ -40,6 +40,8 @@ public class MainActivity extends FlutterActivity {
 
     private static final String CHANNEL = "anipix/ads";
 
+    private MethodChannel adsChannel;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         /* Skip Start.io's GDPR consent popup: we report consent ourselves. */
@@ -54,7 +56,8 @@ public class MainActivity extends FlutterActivity {
     public void configureFlutterEngine(@NonNull FlutterEngine engine) {
         super.configureFlutterEngine(engine);
 
-        new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), CHANNEL)
+        adsChannel = new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), CHANNEL);
+        adsChannel
                 .setMethodCallHandler((call, result) -> {
                     if ("interstitial".equals(call.method)) {
                         showFullScreen(StartAppAd.AdMode.AUTOMATIC, result);
@@ -161,7 +164,7 @@ public class MainActivity extends FlutterActivity {
     public void onPictureInPictureModeChanged(boolean isInPip, Configuration config) {
         super.onPictureInPictureModeChanged(isInPip, config);
         try {
-            final MethodChannel ch = channel;
+            final MethodChannel ch = adsChannel;
             if (ch != null) ch.invokeMethod(isInPip ? "pipOn" : "pipOff", null);
         } catch (Throwable ignored) {
         }
