@@ -81,6 +81,14 @@ def patch_manifest():
     if 'android.permission.AD_ID' not in m:
         m = re.sub(r'(<application[^>]*>)',
                    r'<uses-permission android:name="android.permission.AD_ID"/>\n    \1', m, count=1)
+    for perm in ['FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_DATA_SYNC', 'POST_NOTIFICATIONS']:
+        if 'android.permission.' + perm not in m:
+            m = re.sub(r'(<application[^>]*>)',
+                       r'<uses-permission android:name="android.permission.' + perm + r'"/>\n    \1', m, count=1)
+    if 'UploadService' not in m:
+        m = re.sub(r'(<application[^>]*>)',
+                   r'\1\n        <service android:name=".UploadService" android:exported="false" android:foregroundServiceType="dataSync" />',
+                   m, count=1)
     if 'REQUEST_INSTALL_PACKAGES' not in m:
         m = re.sub(r'(<application[^>]*>)',
                    r'<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>\n    \1', m, count=1)

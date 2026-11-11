@@ -1,5 +1,5 @@
 {
-  "version": "2.2.1",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.2.1/app-release.apk",
-  "notes": "Share button opens the Android share sheet with the app link"
+  "version": "2.3.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.3.0/app-release.apk",
+  "notes": "Upload progress % with a notification, faster raw upload, itch.io share link"
 }

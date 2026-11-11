@@ -80,6 +80,40 @@ class AdminService {
   }
 }
 
+/// Native foreground-service uploader: progress + notification + survives backgrounding.
+class VideoUploader {
+  static const MethodChannel _ch = MethodChannel('anipix/upload');
+  static void Function(int percent)? onProgress;
+  static void Function(String embedUrl)? onDone;
+  static void Function(String message)? onError;
+
+  static void listen() {
+    _ch.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'uploadProgress':
+          onProgress?.call((call.arguments as num).toInt());
+          break;
+        case 'uploadDone':
+          onDone?.call(call.arguments.toString());
+          break;
+        case 'uploadError':
+          onError?.call(call.arguments.toString());
+          break;
+      }
+      return null;
+    });
+  }
+
+  static Future<bool> start({required String path, required String key, required String name}) async {
+    try {
+      final ok = await _ch.invokeMethod<bool>('start', {'path': path, 'key': key, 'name': name});
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 class UfoAccount {
   final String name;
   final String key;
@@ -658,13 +692,47 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
       if (path == null) return;
       setState(() {
         _uploading = true;
-        _info = 'Uploading… a big file can take a few minutes.';
+        _info = 'Uploading… 0%';
       });
-      final embed = await UfoloadService.upload(path, acc.key);
+
+      final done = Completer<String?>();
+      VideoUploader.listen();
+      VideoUploader.onProgress = (p) {
+        if (mounted) setState(() => _info = 'Uploading… $p%');
+      };
+      VideoUploader.onDone = (url) {
+        if (!done.isCompleted) done.complete(url);
+      };
+      VideoUploader.onError = (msg) {
+        if (!done.isCompleted) done.complete(null);
+        if (mounted) setState(() => _info = msg);
+      };
+
+      final started = await VideoUploader.start(
+        path: path,
+        key: acc.key,
+        name: path.split('/').last,
+      );
+
+      String? embed;
+      if (started) {
+        embed = await done.future.timeout(const Duration(minutes: 90), onTimeout: () => null);
+      } else {
+        /* older devices: fall back to the in-app upload */
+        embed = await UfoloadService.upload(path, acc.key);
+      }
+
       if (!mounted) return;
+      if (embed == null || embed.isEmpty) {
+        setState(() {
+          _uploading = false;
+          _info = _info ?? 'Upload failed.';
+        });
+        return;
+      }
       setState(() {
         _uploading = false;
-        _url.text = embed;
+        _url.text = embed!;
         _kind = 'embed';
         _info = 'Uploaded. Encoding takes 5-15 min, then the link plays.';
       });

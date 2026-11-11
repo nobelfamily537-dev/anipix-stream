@@ -11,16 +11,14 @@ const String kGitHubRaw =
 const String kSupportUrl = 'https://t.me/lovelyanime2025';
 
 /// Shared when the user taps Share — the site plus the app download.
-const String kAppUrl =
-    'https://github.com/nobelfamily537-dev/anipix-stream/releases/latest';
+const String kAppUrl = 'https://anipix.itch.io/anipix-stream';
 
 const String kShareText =
     '🎬 AniPix Stream — anime subbed & dubbed in HD\n'
-    'Watch on the site: $kBaseUrl\n'
-    'Get the app: $kAppUrl';
+    'Download the app: $kAppUrl';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '2.2.0';
+const String kAppVersion = '2.3.0';
 
 class Api {
   /// Fire-and-forget view counter (Cloudflare KV). Safe to ignore failures.
