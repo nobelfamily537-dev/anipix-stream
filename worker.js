@@ -513,7 +513,11 @@ export default {
           chat_id: chat,
           text: '✅ <b>AniPix Stream</b>\n\nBot connected. Naya episode publish karte hi post yahan aayega.',
           parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: [[{ text: '▶️ Open AniPix Stream', url: SITE }]] },
+          reply_markup: { inline_keyboard: [
+            [{ text: '▶️ Open AniPix Stream', url: SITE }],
+            [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
+            [{ text: '💬 Join Our Group', url: GROUP_URL }],
+          ] },
         }),
       });
       const body = await res.text();
