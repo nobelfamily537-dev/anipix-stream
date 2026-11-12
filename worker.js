@@ -73,8 +73,40 @@ async function handleVast(request) {
 /* ---------------- library ---------------- */
 async function handleLibrary(request, env) {
   if (request.method === 'GET' || request.method === 'HEAD') {
+    /* the GitHub API is never stale, raw.githubusercontent.com can be for minutes */
+    if (env.GITHUB_TOKEN) {
+      try {
+        const res = await fetch(
+          `https://api.github.com/repos/${REPO}/contents/library.json?ref=${BRANCH}&t=${Date.now()}`,
+          {
+            headers: {
+              authorization: `Bearer ${env.GITHUB_TOKEN}`,
+              accept: 'application/vnd.github+json',
+              'user-agent': 'anipix-library',
+              'cache-control': 'no-cache',
+            },
+            cf: { cacheTtl: 0 },
+          },
+        );
+        if (res.ok) {
+          const meta = await res.json();
+          if (meta && meta.content) {
+            const body = atob(meta.content.replace(/\s/g, ''));
+            return new Response(body, {
+              headers: {
+                'content-type': 'application/json; charset=utf-8',
+                'cache-control': 'no-store',
+                'access-control-allow-origin': '*',
+              },
+            });
+          }
+        }
+      } catch (err) {
+        /* fall through to raw */
+      }
+    }
     try {
-      const res = await fetch(RAW_URL, { cf: { cacheTtl: 0 } });
+      const res = await fetch(`${RAW_URL}?t=${Date.now()}`, { cf: { cacheTtl: 0 } });
       if (res.ok) return json(await res.text());
     } catch (err) {
       /* ignore */

@@ -1,5 +1,5 @@
 {
-  "version": "2.9.2",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.9.2/app-release.apk",
-  "notes": "Upload progress reaches the app again (main-thread dispatch)"
+  "version": "2.9.3",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.9.3/app-release.apk",
+  "notes": "Newly published episodes appear immediately (fresh library via the worker)"
 }

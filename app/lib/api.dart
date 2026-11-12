@@ -19,7 +19,7 @@ const String kShareText =
     '💬 Join our Telegram: https://t.me/Anipix_stream';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '2.9.2';
+const String kAppVersion = '2.9.3';
 
 class Api {
   /// Tells the admin that an episode does not play.
@@ -97,8 +97,8 @@ class Api {
   /// from the admin panel) and falls back to the static file in the repo.
   static Future<Library> fetchLibrary() async {
     final sources = <String>[
+      '$kBaseUrl/api/library',   // worker: always fresh
       kGitHubRaw,
-      '$kBaseUrl/.netlify/functions/library',
       '$kBaseUrl/library.json',
     ];
     Object? lastError;
