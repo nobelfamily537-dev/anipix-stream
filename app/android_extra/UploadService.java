@@ -241,7 +241,7 @@ public class UploadService extends Service {
 
     @Override
     public void onDestroy() {
-        cancelled = true;
+        cancelRequested = true;
         super.onDestroy();
     }
 }
