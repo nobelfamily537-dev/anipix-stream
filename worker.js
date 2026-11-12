@@ -270,6 +270,8 @@ async function handleReport(request, env, url) {
 /* ---------------- Telegram channel poster ---------------- */
 const SITE = 'https://anipix-stream.animeloverclipedits.workers.dev';
 const TG_CHAT_DEFAULT = '@Anipix_stream';
+const APP_URL = 'https://anipix.itch.io/anipix-stream';
+const GROUP_URL = 'https://t.me/lovelyanime2025';
 
 async function tg(env, method, payload) {
   if (!env.TELEGRAM_TOKEN) return false;
@@ -519,7 +521,7 @@ export default {
         ok: true,
         publishKey: !!(env.PUBLISH_KEY || PUBLISH_KEY_SHA256),
         githubToken: !!env.GITHUB_TOKEN,
-        version: 'v2026-11-12-tg5',
+        version: 'v2026-11-12-tg6',
       }));
     }
     if (url.pathname === '/api/test-tg') {
