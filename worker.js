@@ -270,6 +270,8 @@ async function handleReport(request, env, url) {
 /* ---------------- Telegram channel poster ---------------- */
 const SITE = 'https://anipix-stream.animeloverclipedits.workers.dev';
 const TG_CHAT_DEFAULT = '@Anipix_stream';
+const APP_URL = 'https://anipix.itch.io/anipix-stream';
+const GROUP_URL = 'https://t.me/lovelyanime2025';
 
 async function tg(env, method, payload) {
   if (!env.TELEGRAM_TOKEN) return false;
@@ -292,6 +294,34 @@ function esc(s) {
 
 function isHttp(url) {
   return typeof url === 'string' && /^https?:\/\//i.test(url);
+}
+
+/* Telegram can only fetch public http(s) images. Thumbnails stored as base64
+   data URIs are decoded here and uploaded as a file instead. */
+async function sendPhotoSmart(env, chat, photoSrc, caption, kb) {
+  if (isHttp(photoSrc)) {
+    return tg(env, 'sendPhoto', {
+      chat_id: chat, photo: photoSrc, caption, parse_mode: 'HTML', reply_markup: kb,
+    });
+  }
+  const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(String(photoSrc || ''));
+  if (!m) return false;
+  try {
+    const bin = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0));
+    const fd = new FormData();
+    fd.append('chat_id', chat);
+    fd.append('caption', caption);
+    fd.append('parse_mode', 'HTML');
+    fd.append('reply_markup', JSON.stringify(kb));
+    fd.append('photo', new Blob([bin], { type: 'image/jpeg' }), 'cover.jpg');
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      body: fd,
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 function captionFor(playlist, eps) {
@@ -336,21 +366,15 @@ async function notifyTelegram(env, lib, newEps) {
     const buttons = {
       inline_keyboard: [
         [{ text: '🍿 Watch & Download', url }],
-        [{ text: '📱 Open in Mobile App', url: 'https://anipix.itch.io/anipix-stream' }],
         [{ text: '▶️ Watch Online', url }],
+        [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
+        [{ text: '💬 Join Our Group', url: GROUP_URL }],
       ],
     };
 
-    let sent = false;
-    if (isHttp(playlist.thumb)) {
-      sent = await tg(env, 'sendPhoto', {
-        chat_id: chat,
-        photo: playlist.thumb,
-        caption,
-        parse_mode: 'HTML',
-        reply_markup: buttons,
-      });
-    }
+    const photo = isHttp(playlist.banner) ? playlist.banner
+                : (playlist.thumb || playlist.banner || '');
+    const sent = photo ? await sendPhotoSmart(env, chat, photo, caption, buttons) : false;
     if (!sent) {
       await tg(env, 'sendMessage', {
         chat_id: chat,
