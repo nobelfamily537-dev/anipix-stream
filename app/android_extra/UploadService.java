@@ -38,7 +38,11 @@ public class UploadService extends Service {
 
     public static MethodChannel channel;   // set by MainActivity
 
-    private volatile boolean cancelled = false;
+    private static volatile boolean cancelRequested = false;
+
+    public static void requestCancel() {
+        cancelRequested = true;
+    }
 
     @Nullable
     @Override
@@ -54,6 +58,7 @@ public class UploadService extends Service {
         final String key = intent.getStringExtra("key");
         final String name = intent.getStringExtra("name");
 
+        cancelRequested = false;
         createChannel();
         startForeground(NOTIF_ID, buildNotification("Preparing upload…", 0, true));
 
@@ -154,13 +159,21 @@ public class UploadService extends Service {
             long sent = 0;
             int lastPercent = -1;
             long lastNotify = 0;
+            long speedMark = System.currentTimeMillis();
+            long speedBytes = 0;
+            double bps = 0;
             int read;
             while ((read = in.read(buf)) != -1) {
-                if (cancelled) break;
+                if (cancelRequested) break;
                 out.write(buf, 0, read);
                 sent += read;
                 int percent = (int) (sent * 100 / total);
                 long now = System.currentTimeMillis();
+                if (now - speedMark >= 1000) {
+                    bps = (sent - speedBytes) * 1000.0 / (now - speedMark);
+                    speedMark = now;
+                    speedBytes = sent;
+                }
                 if (percent != lastPercent && (now - lastNotify > 350 || percent == 100)) {
                     lastPercent = percent;
                     lastNotify = now;
@@ -171,12 +184,20 @@ public class UploadService extends Service {
                     ev.put("sent", sent);
                     ev.put("total", total);
                     ev.put("name", name == null ? "video" : name);
+                    ev.put("bps", bps);
                     send("uploadProgress", ev);
                 }
             }
             in.close();
             out.flush();
             out.close();
+
+            if (cancelRequested) {
+                finish("Upload cancelled");
+                send("uploadError", "Cancelled");
+                try { conn.disconnect(); } catch (Throwable ignored) {}
+                return;
+            }
 
             int code = conn.getResponseCode();
             InputStream resStream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();

@@ -89,9 +89,16 @@ class UploadJob {
   final String name;
   int total;
   int sent;
-  String status;   // uploading | done | failed
+  double bps;      // bytes per second
+  String status;   // uploading | done | failed | cancelled
   String? url;
-  UploadJob({required this.name, this.total = 0, this.sent = 0, this.status = 'uploading', this.url});
+  UploadJob({required this.name, this.total = 0, this.sent = 0, this.bps = 0, this.status = 'uploading', this.url});
+
+  String get speed {
+    if (bps <= 0) return '';
+    if (bps >= 1048576) return '${(bps / 1048576).toStringAsFixed(1)} MB/s';
+    return '${(bps / 1024).toStringAsFixed(0)} KB/s';
+  }
 
   int get percent => total <= 0 ? 0 : ((sent * 100) / total).clamp(0, 100).round();
   String get mb => '${(sent / 1048576).toStringAsFixed(1)} / ${(total / 1048576).toStringAsFixed(1)} MB';
@@ -116,11 +123,19 @@ class UploadTracker extends ChangeNotifier {
     return null;
   }
 
-  void progress(int percent, int sent, int total) {
+  void progress(int percent, int sent, int total, {double bps = 0}) {
     final job = current();
     if (job == null) return;
     job.sent = sent;
     job.total = total;
+    if (bps > 0) job.bps = bps;
+    notifyListeners();
+  }
+
+  void cancel() {
+    final job = current();
+    if (job == null) return;
+    job.status = 'cancelled';
     notifyListeners();
   }
 
@@ -166,7 +181,8 @@ class VideoUploader {
             final p = (m['percent'] as num?)?.toInt() ?? 0;
             final sent = (m['sent'] as num?)?.toInt() ?? 0;
             final total = (m['total'] as num?)?.toInt() ?? 0;
-            UploadTracker.i.progress(p, sent, total);
+            final bps = (m['bps'] as num?)?.toDouble() ?? 0;
+            UploadTracker.i.progress(p, sent, total, bps: bps);
             onProgress?.call(p);
           }
           break;
@@ -183,6 +199,12 @@ class VideoUploader {
       }
       return null;
     });
+  }
+
+  static Future<void> cancel() async {
+    try {
+      await _ch.invokeMethod('cancel');
+    } catch (_) {}
   }
 
   static Future<bool> start({required String path, required String key, required String name}) async {
@@ -731,6 +753,22 @@ class _EpisodesTab extends StatefulWidget {
   State<_EpisodesTab> createState() => _EpisodesTabState();
 }
 
+class _QualityRow {
+  final TextEditingController q;
+  final TextEditingController watch;
+  final TextEditingController dl;
+  _QualityRow({String quality = '', String w = '', String d = ''})
+      : q = TextEditingController(text: quality),
+        watch = TextEditingController(text: w),
+        dl = TextEditingController(text: d);
+
+  void dispose() {
+    q.dispose();
+    watch.dispose();
+    dl.dispose();
+  }
+}
+
 class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -738,15 +776,16 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
   String? _pid;
   final _epNo = TextEditingController(text: '1');
   final _title = TextEditingController();
-  final _url = TextEditingController();
-  final _quality = TextEditingController(text: '720p');
-  final _ufoKey = TextEditingController();
+  List<_QualityRow> _rows = [
+    _QualityRow(quality: '480p'),
+    _QualityRow(quality: '720p'),
+  ];
   List<UfoAccount> _accounts = [];
   int _accIdx = 0;
   int _season = 1;
-  String _kind = 'embed';
-  bool _uploading = false;
   String? _info;
+  bool _uploading = false;
+  String? _editingId;   // null = adding a new episode
   Map<String, int> _views = {};
 
   @override
@@ -758,17 +797,28 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     Api.fetchViews().then((v) {
       if (mounted) setState(() => _views = v);
     });
+    VideoUploader.listen();
+    UploadTracker.i.addListener(_onTracker);
   }
 
-
+  void _onTracker() {
+    final job = UploadTracker.i.current();
+    if (!mounted) return;
+    if (job == null && _uploading) {
+      setState(() => _uploading = false);
+    } else if (job != null && mounted) {
+      setState(() {});
+    }
+  }
 
   @override
   void dispose() {
+    UploadTracker.i.removeListener(_onTracker);
     _epNo.dispose();
     _title.dispose();
-    _url.dispose();
-    _quality.dispose();
-    _ufoKey.dispose();
+    for (final r in _rows) {
+      r.dispose();
+    }
     super.dispose();
   }
 
@@ -779,28 +829,17 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     }
     if (_accIdx >= _accounts.length) _accIdx = 0;
     final acc = _accounts[_accIdx];
+
     try {
       final picked = await FilePicker.platform.pickFiles(type: FileType.video);
       final path = picked?.files.single.path;
       if (path == null) return;
+
       UploadTracker.i.add(UploadJob(name: path.split('/').last));
       setState(() {
         _uploading = true;
-        _info = 'Uploading… 0% — Uploader tab par progress dekho';
+        _info = 'Uploading — Uploader tab par live progress dekho';
       });
-
-      final done = Completer<String?>();
-      VideoUploader.listen();
-      VideoUploader.onProgress = (p) {
-        if (mounted) setState(() => _info = 'Uploading… $p%');
-      };
-      VideoUploader.onDone = (url) {
-        if (!done.isCompleted) done.complete(url);
-      };
-      VideoUploader.onError = (msg) {
-        if (!done.isCompleted) done.complete(null);
-        if (mounted) setState(() => _info = msg);
-      };
 
       final started = await VideoUploader.start(
         path: path,
@@ -808,28 +847,13 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
         name: path.split('/').last,
       );
 
-      String? embed;
-      if (started) {
-        embed = await done.future.timeout(const Duration(minutes: 90), onTimeout: () => null);
-      } else {
-        /* older devices: fall back to the in-app upload */
-        embed = await UfoloadService.upload(path, acc.key);
-      }
-
-      if (!mounted) return;
-      if (embed == null || embed.isEmpty) {
+      if (!started) {
+        UploadTracker.i.fail('Could not start');
         setState(() {
           _uploading = false;
-          _info = _info ?? 'Upload failed.';
+          _info = 'Upload could not start.';
         });
-        return;
       }
-      setState(() {
-        _uploading = false;
-        _url.text = embed!;
-        _kind = 'embed';
-        _info = 'Uploaded. Encoding takes 5-15 min, then the link plays.';
-      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -837,6 +861,17 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
         _info = e.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  /// called by the tracker when a link is ready
+  void _fillLink(String url) {
+    for (final r in _rows) {
+      if (r.watch.text.trim().isEmpty) {
+        r.watch.text = url;
+        return;
+      }
+    }
+    _rows.first.watch.text = url;
   }
 
   @override
@@ -847,6 +882,13 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     final episodes = _pid == null ? <Episode>[] : widget.lib.episodesOf(_pid!);
     final seasons = <int>{1, for (final e in episodes) e.season};
 
+    /* keep the uploaded link in the first empty row */
+    final doneJob = UploadTracker.i.jobs.where((j) => j.status == 'done' && j.url != null).toList();
+    if (doneJob.isNotEmpty) {
+      final url = doneJob.first.url!;
+      if (!_rows.any((r) => r.watch.text == url)) _fillLink(url);
+    }
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
       children: [
@@ -855,7 +897,10 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
         _dropdown<String>(
           value: _pid,
           items: [for (final p in playlists) MapEntry(p.id, p.title)],
-          onChanged: (v) => setState(() => _pid = v),
+          onChanged: (v) => setState(() {
+            _pid = v;
+            _editingId = null;
+          }),
         ),
         const SizedBox(height: 12),
         Row(
@@ -893,9 +938,22 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
           style: const TextStyle(fontSize: 13),
           decoration: const InputDecoration(labelText: 'Episode title (optional)', isDense: true),
         ),
-        const SizedBox(height: 12),
-        const Text('Upload to account',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+        const SizedBox(height: 16),
+
+        /* upload */
+        Row(
+          children: [
+            const Text('Upload to account',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+            const Spacer(),
+            if (_uploading)
+              TextButton(
+                onPressed: () => VideoUploader.cancel(),
+                child: const Text('Cancel upload',
+                    style: TextStyle(fontSize: 12, color: Color(0xFFFF8A8A))),
+              ),
+          ],
+        ),
         const SizedBox(height: 6),
         if (_accounts.isEmpty)
           const Text('No UFOLOAD account yet — add one in the Settings tab.',
@@ -931,36 +989,24 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
             padding: const EdgeInsets.only(top: 6),
             child: Text(_info!, style: const TextStyle(fontSize: 11.5, color: kMuted, height: 1.4)),
           ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _url,
-          keyboardType: TextInputType.url,
-          style: const TextStyle(fontSize: 13),
-          decoration: const InputDecoration(labelText: 'Video link', hintText: 'https://…', isDense: true),
-        ),
-        const SizedBox(height: 12),
+
+        const SizedBox(height: 18),
         Row(
           children: [
-            Expanded(
-              child: TextField(
-                controller: _quality,
-                style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Quality', isDense: true),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _dropdown<String>(
-                value: _kind,
-                items: const [
-                  MapEntry('embed', 'Embed (iframe)'),
-                  MapEntry('file', 'Direct MP4'),
-                ],
-                onChanged: (v) => setState(() => _kind = v ?? 'embed'),
-              ),
+            const Text('Qualities & links',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => setState(() => _rows.add(_QualityRow())),
+              icon: const Icon(Icons.add, size: 16, color: kBrand),
+              label: const Text('Add quality', style: TextStyle(fontSize: 12, color: kBrand)),
             ),
           ],
         ),
+        const Text('Har quality ka watch link, aur chaho to download (MP4) link.',
+            style: TextStyle(fontSize: 11, color: kMuted)),
+        const SizedBox(height: 10),
+        for (var i = 0; i < _rows.length; i++) _qualityCard(i),
         const SizedBox(height: 16),
         SizedBox(
           height: 46,
@@ -970,172 +1016,190 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
               foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () {
-              final pid = _pid;
-              final n = int.tryParse(_epNo.text.trim()) ?? 0;
-              final url = _url.text.trim();
-              if (pid == null) return setState(() => _info = 'Pick a playlist.');
-              if (n <= 0) return setState(() => _info = 'Episode number must be 1 or more.');
-              if (!url.startsWith('http')) return setState(() => _info = 'Paste a full link (https://…).');
-
-              final ep = {
-                'id': 'e${DateTime.now().millisecondsSinceEpoch}',
-                'playlistId': pid,
-                'season': _season,
-                'n': n,
-                'title': _title.text.trim(),
-                'at': DateTime.now().millisecondsSinceEpoch,
-                'sources': [
-                  {'q': _quality.text.trim().isEmpty ? 'HD' : _quality.text.trim(), 'url': url, 'kind': _kind}
-                ],
-                'downloads': <Map<String, String>>[],
-              };
-              widget.onPublish((raw) {
-                final es = List<dynamic>.from(raw['episodes'] ?? const []);
-                es.add(ep);
-                raw['episodes'] = es;
-              }, 'Episode published.');
-              _url.clear();
-              _title.clear();
-            },
-            child: const Text('Publish episode', style: TextStyle(fontWeight: FontWeight.w800)),
+            onPressed: _save,
+            child: Text(_editingId == null ? 'Publish episode' : 'Save changes',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
           ),
         ),
+        if (_editingId != null)
+          Center(
+            child: TextButton(
+              onPressed: () => setState(() => _resetForm()),
+              child: const Text('Cancel editing', style: TextStyle(fontSize: 12, color: kMuted)),
+            ),
+          ),
         const SizedBox(height: 22),
-        const Text('Existing episodes',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        const Text('Existing episodes', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text('Tap an episode to see and edit all its quality links.',
+            style: TextStyle(fontSize: 11, color: kMuted)),
         const SizedBox(height: 6),
         if (episodes.isEmpty)
           const Text('No episodes yet.', style: TextStyle(fontSize: 12, color: kMuted))
         else
-          for (final e in episodes)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              onTap: () => _editEpisode(e),
-              title: Text('S${e.season} E${e.n}${e.title.isNotEmpty ? ' · ${e.title}' : ''}',
-                  style: const TextStyle(fontSize: 13)),
-              subtitle: Text(
-                  '${e.sources.map((s) => s.q).join(' · ')}  ·  👁 ${_views[e.id] ?? 0} views',
-                  style: const TextStyle(fontSize: 11, color: kMuted)),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
-                onPressed: () => widget.onPublish((raw) {
-                  final es = List<dynamic>.from(raw['episodes'] ?? const []);
-                  es.removeWhere((x) => x is Map && x['id'] == e.id);
-                  raw['episodes'] = es;
-                }, 'Episode deleted.'),
-              ),
-            ),
+          for (final e in episodes) _episodeTile(e),
       ],
     );
   }
 
-  /// Edit an existing episode (link, quality, title) in place.
-  void _editEpisode(Episode e) {
-    final first = e.sources.isNotEmpty ? e.sources.first : null;
-    final title = TextEditingController(text: e.title);
-    final url = TextEditingController(text: first?.url ?? '');
-    final quality = TextEditingController(text: first?.q ?? '720p');
-    String kind = first?.kind ?? 'embed';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: kSurface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 26),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _qualityCard(int i) {
+    final r = _rows[i];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: kSurface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kLine),
+      ),
+      child: Column(
+        children: [
+          Row(
             children: [
-              Text('Edit S${e.season} E${e.n}',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 14),
-              TextField(
-                controller: title,
-                style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Episode title', isDense: true),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: url,
-                keyboardType: TextInputType.url,
-                style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Video link', isDense: true),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: quality,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: const InputDecoration(labelText: 'Quality', isDense: true),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButton<String>(
-                      value: kind,
-                      isExpanded: true,
-                      dropdownColor: kSurface,
-                      items: const [
-                        DropdownMenuItem(value: 'embed', child: Text('Embed', style: TextStyle(fontSize: 13))),
-                        DropdownMenuItem(value: 'file', child: Text('Direct MP4', style: TextStyle(fontSize: 13))),
-                      ],
-                      onChanged: (v) => kind = v ?? 'embed',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
               SizedBox(
-                height: 44,
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kBrand,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () {
-                    final u = url.text.trim();
-                    if (!u.startsWith('http')) {
-                      setState(() => _info = 'Paste a full link (https://…).');
-                      return;
-                    }
-                    Navigator.pop(ctx);
-                    widget.onPublish((raw) {
-                      final es = List<dynamic>.from(raw['episodes'] ?? const []);
-                      for (var i = 0; i < es.length; i++) {
-                        final m = es[i];
-                        if (m is Map && m['id'] == e.id) {
-                          final updated = Map<String, dynamic>.from(m);
-                          updated['title'] = title.text.trim();
-                          updated['sources'] = [
-                            {
-                              'q': quality.text.trim().isEmpty ? 'HD' : quality.text.trim(),
-                              'url': u,
-                              'kind': kind,
-                            }
-                          ];
-                          es[i] = updated;
-                        }
-                      }
-                      raw['episodes'] = es;
-                    }, 'Episode updated.');
-                  },
-                  child: const Text('Save changes', style: TextStyle(fontWeight: FontWeight.w800)),
+                width: 84,
+                child: TextField(
+                  controller: r.q,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: const InputDecoration(labelText: 'Quality', hintText: '480p', isDense: true),
                 ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
+                onPressed: _rows.length <= 1
+                    ? null
+                    : () => setState(() {
+                          _rows.removeAt(i).dispose();
+                        }),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: r.watch,
+            keyboardType: TextInputType.url,
+            style: const TextStyle(fontSize: 12.5),
+            decoration: const InputDecoration(labelText: 'Watch link (embed)', isDense: true),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: r.dl,
+            keyboardType: TextInputType.url,
+            style: const TextStyle(fontSize: 12.5),
+            decoration: const InputDecoration(
+                labelText: 'Download link (MP4, optional)', isDense: true),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _episodeTile(Episode e) {
+    final qs = e.sources.map((s) => s.q).join(' · ');
+    final dls = e.downloads.map((d) => d.q).join(' · ');
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      onTap: () => _loadEpisode(e),
+      title: Text('S${e.season} E${e.n}${e.title.isNotEmpty ? ' · ${e.title}' : ''}',
+          style: const TextStyle(fontSize: 13)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Watch: ${qs.isEmpty ? '—' : qs}',
+              style: const TextStyle(fontSize: 11, color: kMuted)),
+          Text('Download: ${dls.isEmpty ? '—' : dls}',
+              style: const TextStyle(fontSize: 11, color: kMuted)),
+          Text('👁 ${_views[e.id] ?? 0} views',
+              style: const TextStyle(fontSize: 10.5, color: kMuted)),
+        ],
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
+        onPressed: () => widget.onPublish((raw) {
+          final es = List<dynamic>.from(raw['episodes'] ?? const []);
+          es.removeWhere((x) => x is Map && x['id'] == e.id);
+          raw['episodes'] = es;
+        }, 'Episode deleted.'),
+      ),
+    );
+  }
+
+  void _loadEpisode(Episode e) {
+    setState(() {
+      _editingId = e.id;
+      _season = e.season;
+      _epNo.text = e.n.toString();
+      _title.text = e.title;
+      for (final r in _rows) {
+        r.dispose();
+      }
+      _rows = [];
+      for (final src in e.sources) {
+        final dl = e.downloads.where((d) => d.q == src.q).map((d) => d.url).cast<String>();
+        _rows.add(_QualityRow(
+          quality: src.q,
+          w: src.url,
+          d: dl.isNotEmpty ? dl.first : '',
+        ));
+      }
+      if (_rows.isEmpty) _rows.add(_QualityRow(quality: '480p'));
+    });
+  }
+
+  void _resetForm() {
+    _editingId = null;
+    for (final r in _rows) {
+      r.dispose();
+    }
+    _rows = [_QualityRow(quality: '480p'), _QualityRow(quality: '720p')];
+    _title.clear();
+    _epNo.text = '1';
+  }
+
+  void _save() {
+    final pid = _pid;
+    final n = int.tryParse(_epNo.text.trim()) ?? 0;
+    if (pid == null) return setState(() => _info = 'Pick a playlist.');
+    if (n <= 0) return setState(() => _info = 'Episode number must be 1 or more.');
+
+    final sources = <Map<String, String>>[];
+    final downloads = <Map<String, String>>[];
+    for (final r in _rows) {
+      final w = r.watch.text.trim();
+      final q = r.q.text.trim().isEmpty ? 'HD' : r.q.text.trim();
+      if (w.startsWith('http')) {
+        sources.add({'q': q, 'url': w, 'kind': 'embed'});
+      }
+      final d = r.dl.text.trim();
+      if (d.startsWith('http')) downloads.add({'q': q, 'url': d});
+    }
+    if (sources.isEmpty) {
+      return setState(() => _info = 'At least one watch link is required.');
+    }
+
+    final id = _editingId ?? 'e${DateTime.now().millisecondsSinceEpoch}';
+    final ep = {
+      'id': id,
+      'playlistId': pid,
+      'season': _season,
+      'n': n,
+      'title': _title.text.trim(),
+      'at': DateTime.now().millisecondsSinceEpoch,
+      'sources': sources,
+      'downloads': downloads,
+    };
+
+    widget.onPublish((raw) {
+      final es = List<dynamic>.from(raw['episodes'] ?? const []);
+      es.removeWhere((x) => x is Map && x['id'] == id);
+      es.add(ep);
+      raw['episodes'] = es;
+    }, _editingId == null ? 'Episode published.' : 'Episode updated.');
+
+    _resetForm();
+    setState(() => _info = null);
   }
 
   Widget _dropdown<T>({
@@ -1245,7 +1309,7 @@ class _UploaderTabState extends State<_UploaderTab> {
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               ),
               Text(
-                done ? 'Done' : (failed ? 'Failed' : '${j.percent}%'),
+                done ? 'Done' : (failed ? 'Failed' : (j.status == 'cancelled' ? 'Cancelled' : '${j.percent}%')),
                 style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -1268,9 +1332,24 @@ class _UploaderTabState extends State<_UploaderTab> {
           Row(
             children: [
               Text(j.mb, style: const TextStyle(fontSize: 11, color: kMuted)),
+              if (j.speed.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                Text(j.speed, style: const TextStyle(fontSize: 11, color: kBrand)),
+              ],
               const Spacer(),
-              if (done && j.url != null)
-                const Text('Link ready', style: TextStyle(fontSize: 11, color: kBrand)),
+              if (j.status == 'uploading')
+                TextButton(
+                  onPressed: () {
+                    VideoUploader.cancel();
+                    UploadTracker.i.cancel();
+                  },
+                  child: const Text('Cancel',
+                      style: TextStyle(fontSize: 11.5, color: Color(0xFFFF8A8A))),
+                )
+              else if (done && j.url != null)
+                const Text('Link ready', style: TextStyle(fontSize: 11, color: kBrand))
+              else if (j.status == 'cancelled')
+                const Text('Cancelled', style: TextStyle(fontSize: 11, color: kMuted)),
             ],
           ),
         ],

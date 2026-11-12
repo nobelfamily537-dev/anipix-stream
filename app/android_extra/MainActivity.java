@@ -104,7 +104,10 @@ public class MainActivity extends FlutterActivity {
                 new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "anipix/upload");
         UploadService.channel = uploadChannel;
         uploadChannel.setMethodCallHandler((call, result) -> {
-            if ("start".equals(call.method)) {
+            if ("cancel".equals(call.method)) {
+                UploadService.requestCancel();
+                result.success(true);
+            } else if ("start".equals(call.method)) {
                 Intent i = new Intent(this, UploadService.class);
                 i.putExtra("path", (String) call.argument("path"));
                 i.putExtra("key", (String) call.argument("key"));

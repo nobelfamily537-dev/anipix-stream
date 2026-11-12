@@ -1,5 +1,5 @@
 {
-  "version": "2.7.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.7.0/app-release.apk",
-  "notes": "Uploader tab with live % and MB, background uploads, faster chunks"
+  "version": "2.8.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.8.0/app-release.apk",
+  "notes": "Per-quality watch + download links, cancel upload, live speed"
 }
