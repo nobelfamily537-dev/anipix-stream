@@ -91,7 +91,10 @@ async function handleLibrary(request, env) {
         if (res.ok) {
           const meta = await res.json();
           if (meta && meta.content) {
-            const body = atob(meta.content.replace(/\s/g, ''));
+            /* atob gives a Latin-1 string; decode the bytes as UTF-8 properly */
+            const bin = atob(meta.content.replace(/\s/g, ''));
+            const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+            const body = new TextDecoder('utf-8').decode(bytes);
             return new Response(body, {
               headers: {
                 'content-type': 'application/json; charset=utf-8',
@@ -521,7 +524,7 @@ export default {
         ok: true,
         publishKey: !!(env.PUBLISH_KEY || PUBLISH_KEY_SHA256),
         githubToken: !!env.GITHUB_TOKEN,
-        version: 'v2026-11-12-tg6',
+        version: 'v2026-11-12-tg7',
       }));
     }
     if (url.pathname === '/api/test-tg') {
