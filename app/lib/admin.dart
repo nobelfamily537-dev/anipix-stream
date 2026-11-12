@@ -123,6 +123,13 @@ class UploadTracker extends ChangeNotifier {
     return null;
   }
 
+  void startSize(int total) {
+    final job = current();
+    if (job == null) return;
+    job.total = total;
+    notifyListeners();
+  }
+
   void progress(int percent, int sent, int total, {double bps = 0}) {
     final job = current();
     if (job == null) return;
@@ -175,6 +182,13 @@ class VideoUploader {
     _listening = true;
     _ch.setMethodCallHandler((call) async {
       switch (call.method) {
+        case 'uploadStarted':
+          final m = call.arguments;
+          if (m is Map) {
+            final total = (m['total'] as num?)?.toInt() ?? 0;
+            UploadTracker.i.startSize(total);
+          }
+          break;
         case 'uploadProgress':
           final m = call.arguments;
           if (m is Map) {

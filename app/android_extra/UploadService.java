@@ -120,13 +120,21 @@ public class UploadService extends Service {
         stopSelf();
     }
 
-    private void send(String method, Object arg) {
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+
+    /** MethodChannel must be called on the platform thread. */
+    private void send(final String method, final Object arg) {
         final MethodChannel ch = channel;
         if (ch == null) return;
-        try {
-            ch.invokeMethod(method, arg);
-        } catch (Throwable ignored) {
-        }
+        main.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    ch.invokeMethod(method, arg);
+                } catch (Throwable ignored) {
+                }
+            }
+        });
     }
 
     private void upload(String path, String key, String name) {
@@ -139,6 +147,11 @@ public class UploadService extends Service {
                 send("uploadError", "File not readable");
                 return;
             }
+
+            java.util.HashMap<String, Object> startEv = new java.util.HashMap<>();
+            startEv.put("total", total);
+            startEv.put("name", name == null ? "video" : name);
+            send("uploadStarted", startEv);
 
             URL url = new URL("https://ufoload.com/api/v1/files?folder_id=root");
             conn = (HttpURLConnection) url.openConnection();

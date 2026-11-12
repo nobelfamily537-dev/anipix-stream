@@ -1,5 +1,5 @@
 {
-  "version": "2.9.1",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.9.1/app-release.apk",
-  "notes": "Upload button under each quality field"
+  "version": "2.9.2",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.9.2/app-release.apk",
+  "notes": "Upload progress reaches the app again (main-thread dispatch)"
 }
