@@ -753,39 +753,24 @@ class _EpisodesTab extends StatefulWidget {
   State<_EpisodesTab> createState() => _EpisodesTabState();
 }
 
-class _QualityRow {
-  final TextEditingController q;
-  final TextEditingController watch;
-  final TextEditingController dl;
-  _QualityRow({String quality = '', String w = '', String d = ''})
-      : q = TextEditingController(text: quality),
-        watch = TextEditingController(text: w),
-        dl = TextEditingController(text: d);
-
-  void dispose() {
-    q.dispose();
-    watch.dispose();
-    dl.dispose();
-  }
-}
-
 class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
   String? _pid;
+  int _season = 1;
   final _epNo = TextEditingController(text: '1');
   final _title = TextEditingController();
-  List<_QualityRow> _rows = [
-    _QualityRow(quality: '480p'),
-    _QualityRow(quality: '720p'),
-  ];
+  final _w480 = TextEditingController();
+  final _w720 = TextEditingController();
+  final _d480 = TextEditingController();
+  final _d720 = TextEditingController();
+
   List<UfoAccount> _accounts = [];
   int _accIdx = 0;
-  int _season = 1;
   String? _info;
   bool _uploading = false;
-  String? _editingId;   // null = adding a new episode
+  String? _editingId;
   Map<String, int> _views = {};
 
   @override
@@ -802,11 +787,11 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
   }
 
   void _onTracker() {
-    final job = UploadTracker.i.current();
     if (!mounted) return;
+    final job = UploadTracker.i.current();
     if (job == null && _uploading) {
       setState(() => _uploading = false);
-    } else if (job != null && mounted) {
+    } else {
       setState(() {});
     }
   }
@@ -816,10 +801,63 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     UploadTracker.i.removeListener(_onTracker);
     _epNo.dispose();
     _title.dispose();
-    for (final r in _rows) {
-      r.dispose();
-    }
+    _w480.dispose();
+    _w720.dispose();
+    _d480.dispose();
+    _d720.dispose();
     super.dispose();
+  }
+
+  void _syncFromExisting() {
+    final pid = _pid;
+    final n = int.tryParse(_epNo.text.trim()) ?? 0;
+    if (pid == null || n <= 0) return;
+    Episode? found;
+    for (final e in widget.lib.episodesOf(pid)) {
+      if (e.n == n && e.season == _season) {
+        found = e;
+        break;
+      }
+    }
+    if (found == null) {
+      if (_editingId != null) {
+        _editingId = null;
+        _w480.clear();
+        _w720.clear();
+        _d480.clear();
+        _d720.clear();
+        _title.clear();
+        setState(() {});
+      }
+      return;
+    }
+
+    _editingId = found.id;
+    _title.text = found.title;
+    _w480.text = '';
+    _w720.text = '';
+    _d480.text = '';
+    _d720.text = '';
+    for (final src in found.sources) {
+      if (src.q.startsWith('480')) _w480.text = src.url;
+      if (src.q.startsWith('720')) _w720.text = src.url;
+    }
+    for (final d in found.downloads) {
+      if (d.q.startsWith('480')) _d480.text = d.url;
+      if (d.q.startsWith('720')) _d720.text = d.url;
+    }
+    setState(() {});
+  }
+
+  void _resetForm() {
+    _editingId = null;
+    _title.clear();
+    _w480.clear();
+    _w720.clear();
+    _d480.clear();
+    _d720.clear();
+    _epNo.text = '1';
+    setState(() {});
   }
 
   Future<void> _upload() async {
@@ -846,7 +884,6 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
         key: acc.key,
         name: path.split('/').last,
       );
-
       if (!started) {
         UploadTracker.i.fail('Could not start');
         setState(() {
@@ -863,15 +900,51 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     }
   }
 
-  /// called by the tracker when a link is ready
-  void _fillLink(String url) {
-    for (final r in _rows) {
-      if (r.watch.text.trim().isEmpty) {
-        r.watch.text = url;
-        return;
-      }
+  void _save() {
+    final pid = _pid;
+    final n = int.tryParse(_epNo.text.trim()) ?? 0;
+    if (pid == null) return setState(() => _info = 'Pick a playlist.');
+    if (n <= 0) return setState(() => _info = 'Episode number must be 1 or more.');
+
+    final sources = <Map<String, String>>[];
+    final downloads = <Map<String, String>>[];
+    if (_w480.text.trim().startsWith('http')) {
+      sources.add({'q': '480p', 'url': _w480.text.trim(), 'kind': 'embed'});
     }
-    _rows.first.watch.text = url;
+    if (_w720.text.trim().startsWith('http')) {
+      sources.add({'q': '720p', 'url': _w720.text.trim(), 'kind': 'embed'});
+    }
+    if (_d480.text.trim().startsWith('http')) {
+      downloads.add({'q': '480p', 'url': _d480.text.trim()});
+    }
+    if (_d720.text.trim().startsWith('http')) {
+      downloads.add({'q': '720p', 'url': _d720.text.trim()});
+    }
+    if (sources.isEmpty) {
+      return setState(() => _info = 'Kam se kam ek watch link daalo (480p ya 720p).');
+    }
+
+    final id = _editingId ?? 'e${DateTime.now().millisecondsSinceEpoch}';
+    final ep = {
+      'id': id,
+      'playlistId': pid,
+      'season': _season,
+      'n': n,
+      'title': _title.text.trim(),
+      'at': DateTime.now().millisecondsSinceEpoch,
+      'sources': sources,
+      'downloads': downloads,
+    };
+
+    widget.onPublish((raw) {
+      final es = List<dynamic>.from(raw['episodes'] ?? const []);
+      es.removeWhere((x) => x is Map && x['id'] == id);
+      es.add(ep);
+      raw['episodes'] = es;
+    }, _editingId == null ? 'Episode published.' : 'Episode updated.');
+
+    setState(() => _info = null);
+    _resetForm();
   }
 
   @override
@@ -882,25 +955,35 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     final episodes = _pid == null ? <Episode>[] : widget.lib.episodesOf(_pid!);
     final seasons = <int>{1, for (final e in episodes) e.season};
 
-    /* keep the uploaded link in the first empty row */
-    final doneJob = UploadTracker.i.jobs.where((j) => j.status == 'done' && j.url != null).toList();
-    if (doneJob.isNotEmpty) {
-      final url = doneJob.first.url!;
-      if (!_rows.any((r) => r.watch.text == url)) _fillLink(url);
+    for (final j in UploadTracker.i.jobs) {
+      if (j.status == 'done' && j.url != null) {
+        final u = j.url!;
+        if (_w480.text != u && _w720.text != u) {
+          if (_w480.text.trim().isEmpty) {
+            _w480.text = u;
+          } else if (_w720.text.trim().isEmpty) {
+            _w720.text = u;
+          }
+        }
+      }
     }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
       children: [
-        const Text('Playlist', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+        const Text('Playlist',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
         const SizedBox(height: 6),
         _dropdown<String>(
           value: _pid,
           items: [for (final p in playlists) MapEntry(p.id, p.title)],
-          onChanged: (v) => setState(() {
-            _pid = v;
-            _editingId = null;
-          }),
+          onChanged: (v) {
+            setState(() {
+              _pid = v;
+              _editingId = null;
+            });
+            _syncFromExisting();
+          },
         ),
         const SizedBox(height: 12),
         Row(
@@ -909,12 +992,16 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Season', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+                  const Text('Season',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
                   const SizedBox(height: 6),
                   _dropdown<int>(
                     value: _season,
                     items: [for (final s in seasons.toList()..sort()) MapEntry(s, 'Season $s')],
-                    onChanged: (v) => setState(() => _season = v ?? 1),
+                    onChanged: (v) {
+                      setState(() => _season = v ?? 1);
+                      _syncFromExisting();
+                    },
                   ),
                 ],
               ),
@@ -924,9 +1011,15 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Episode no.', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+                  const Text('Episode no.',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
                   const SizedBox(height: 6),
-                  TextField(controller: _epNo, keyboardType: TextInputType.number, style: const TextStyle(fontSize: 13)),
+                  TextField(
+                    controller: _epNo,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontSize: 13),
+                    onChanged: (_) => _syncFromExisting(),
+                  ),
                 ],
               ),
             ),
@@ -938,17 +1031,42 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
           style: const TextStyle(fontSize: 13),
           decoration: const InputDecoration(labelText: 'Episode title (optional)', isDense: true),
         ),
-        const SizedBox(height: 16),
 
-        /* upload */
+        if (_editingId != null)
+          Container(
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: kBrand.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: kBrand.withOpacity(0.45)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 15, color: kBrand),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Yeh episode pehle se hai — iske links neeche bhar diye hain. Save karne par update ho jayega.',
+                    style: const TextStyle(fontSize: 11.5, color: kText, height: 1.35),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        const SizedBox(height: 16),
         Row(
           children: [
-            const Text('Upload to account',
+            const Text('Upload video',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
             const Spacer(),
             if (_uploading)
               TextButton(
-                onPressed: () => VideoUploader.cancel(),
+                onPressed: () {
+                  VideoUploader.cancel();
+                  UploadTracker.i.cancel();
+                },
                 child: const Text('Cancel upload',
                     style: TextStyle(fontSize: 12, color: Color(0xFFFF8A8A))),
               ),
@@ -991,23 +1109,27 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
           ),
 
         const SizedBox(height: 18),
-        Row(
-          children: [
-            const Text('Qualities & links',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: () => setState(() => _rows.add(_QualityRow())),
-              icon: const Icon(Icons.add, size: 16, color: kBrand),
-              label: const Text('Add quality', style: TextStyle(fontSize: 12, color: kBrand)),
-            ),
-          ],
-        ),
-        const Text('Har quality ka watch link, aur chaho to download (MP4) link.',
+        const Text('Watch links', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text('Embed link paste karo — jo quality doge wahi app mein dikhegi.',
             style: TextStyle(fontSize: 11, color: kMuted)),
         const SizedBox(height: 10),
-        for (var i = 0; i < _rows.length; i++) _qualityCard(i),
-        const SizedBox(height: 16),
+        _linkField('480p link', _w480, 'https://…480p'),
+        const SizedBox(height: 10),
+        _linkField('720p link', _w720, 'https://…720p'),
+
+        const SizedBox(height: 20),
+        const Text('Download links (optional)',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text('Sirf yahan jo daaloge wahi quality Download menu mein aayegi.',
+            style: TextStyle(fontSize: 11, color: kMuted)),
+        const SizedBox(height: 10),
+        _linkField('480p download link', _d480, 'https://…480p.mp4'),
+        const SizedBox(height: 10),
+        _linkField('720p download link', _d720, 'https://…720p.mp4'),
+
+        const SizedBox(height: 18),
         SizedBox(
           height: 46,
           child: ElevatedButton(
@@ -1017,23 +1139,21 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: _save,
-            child: Text(_editingId == null ? 'Publish episode' : 'Save changes',
+            child: Text(_editingId == null ? 'Save episode' : 'Update episode',
                 style: const TextStyle(fontWeight: FontWeight.w800)),
           ),
         ),
         if (_editingId != null)
           Center(
             child: TextButton(
-              onPressed: () => setState(() => _resetForm()),
+              onPressed: _resetForm,
               child: const Text('Cancel editing', style: TextStyle(fontSize: 12, color: kMuted)),
             ),
           ),
-        const SizedBox(height: 22),
+
+        const SizedBox(height: 24),
         const Text('Existing episodes', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        const Text('Tap an episode to see and edit all its quality links.',
-            style: TextStyle(fontSize: 11, color: kMuted)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         if (episodes.isEmpty)
           const Text('No episodes yet.', style: TextStyle(fontSize: 12, color: kMuted))
         else
@@ -1042,164 +1162,96 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     );
   }
 
-  Widget _qualityCard(int i) {
-    final r = _rows[i];
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: kSurface2,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kLine),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 84,
-                child: TextField(
-                  controller: r.q,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: const InputDecoration(labelText: 'Quality', hintText: '480p', isDense: true),
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
-                onPressed: _rows.length <= 1
-                    ? null
-                    : () => setState(() {
-                          _rows.removeAt(i).dispose();
-                        }),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: r.watch,
-            keyboardType: TextInputType.url,
-            style: const TextStyle(fontSize: 12.5),
-            decoration: const InputDecoration(labelText: 'Watch link (embed)', isDense: true),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: r.dl,
-            keyboardType: TextInputType.url,
-            style: const TextStyle(fontSize: 12.5),
-            decoration: const InputDecoration(
-                labelText: 'Download link (MP4, optional)', isDense: true),
-          ),
-        ],
-      ),
+  Widget _linkField(String label, TextEditingController c, String hint) {
+    return TextField(
+      controller: c,
+      keyboardType: TextInputType.url,
+      style: const TextStyle(fontSize: 12.5),
+      decoration: InputDecoration(labelText: label, hintText: hint, isDense: true),
     );
   }
 
   Widget _episodeTile(Episode e) {
-    final qs = e.sources.map((s) => s.q).join(' · ');
-    final dls = e.downloads.map((d) => d.q).join(' · ');
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      dense: true,
-      onTap: () => _loadEpisode(e),
-      title: Text('S${e.season} E${e.n}${e.title.isNotEmpty ? ' · ${e.title}' : ''}',
-          style: const TextStyle(fontSize: 13)),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Watch: ${qs.isEmpty ? '—' : qs}',
-              style: const TextStyle(fontSize: 11, color: kMuted)),
-          Text('Download: ${dls.isEmpty ? '—' : dls}',
-              style: const TextStyle(fontSize: 11, color: kMuted)),
-          Text('👁 ${_views[e.id] ?? 0} views',
-              style: const TextStyle(fontSize: 10.5, color: kMuted)),
-        ],
+    final watch = e.sources.map((s) => s.q).toList();
+    final dls = e.downloads.map((d) => d.q).toList();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: kSurface2,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kLine),
       ),
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
-        onPressed: () => widget.onPublish((raw) {
-          final es = List<dynamic>.from(raw['episodes'] ?? const []);
-          es.removeWhere((x) => x is Map && x['id'] == e.id);
-          raw['episodes'] = es;
-        }, 'Episode deleted.'),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: kBrand.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text('S${e.season} E${e.n}',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: kBrand)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (e.title.isNotEmpty)
+                  Text(e.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 3),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final q in watch) _badge('$q · WATCH', kBrand),
+                    for (final q in dls) _badge('$q · DL', const Color(0xFF7FB2FF)),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text('👁 ${_views[e.id] ?? 0} views',
+                    style: const TextStyle(fontSize: 10.5, color: kMuted)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 17, color: kMuted),
+            onPressed: () {
+              setState(() {
+                _season = e.season;
+                _epNo.text = e.n.toString();
+              });
+              _syncFromExisting();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 17, color: Color(0xFFFF8A8A)),
+            onPressed: () => widget.onPublish((raw) {
+              final es = List<dynamic>.from(raw['episodes'] ?? const []);
+              es.removeWhere((x) => x is Map && x['id'] == e.id);
+              raw['episodes'] = es;
+            }, 'Episode deleted.'),
+          ),
+        ],
       ),
     );
   }
 
-  void _loadEpisode(Episode e) {
-    setState(() {
-      _editingId = e.id;
-      _season = e.season;
-      _epNo.text = e.n.toString();
-      _title.text = e.title;
-      for (final r in _rows) {
-        r.dispose();
-      }
-      _rows = [];
-      for (final src in e.sources) {
-        final dl = e.downloads.where((d) => d.q == src.q).map((d) => d.url).cast<String>();
-        _rows.add(_QualityRow(
-          quality: src.q,
-          w: src.url,
-          d: dl.isNotEmpty ? dl.first : '',
-        ));
-      }
-      if (_rows.isEmpty) _rows.add(_QualityRow(quality: '480p'));
-    });
-  }
-
-  void _resetForm() {
-    _editingId = null;
-    for (final r in _rows) {
-      r.dispose();
-    }
-    _rows = [_QualityRow(quality: '480p'), _QualityRow(quality: '720p')];
-    _title.clear();
-    _epNo.text = '1';
-  }
-
-  void _save() {
-    final pid = _pid;
-    final n = int.tryParse(_epNo.text.trim()) ?? 0;
-    if (pid == null) return setState(() => _info = 'Pick a playlist.');
-    if (n <= 0) return setState(() => _info = 'Episode number must be 1 or more.');
-
-    final sources = <Map<String, String>>[];
-    final downloads = <Map<String, String>>[];
-    for (final r in _rows) {
-      final w = r.watch.text.trim();
-      final q = r.q.text.trim().isEmpty ? 'HD' : r.q.text.trim();
-      if (w.startsWith('http')) {
-        sources.add({'q': q, 'url': w, 'kind': 'embed'});
-      }
-      final d = r.dl.text.trim();
-      if (d.startsWith('http')) downloads.add({'q': q, 'url': d});
-    }
-    if (sources.isEmpty) {
-      return setState(() => _info = 'At least one watch link is required.');
-    }
-
-    final id = _editingId ?? 'e${DateTime.now().millisecondsSinceEpoch}';
-    final ep = {
-      'id': id,
-      'playlistId': pid,
-      'season': _season,
-      'n': n,
-      'title': _title.text.trim(),
-      'at': DateTime.now().millisecondsSinceEpoch,
-      'sources': sources,
-      'downloads': downloads,
-    };
-
-    widget.onPublish((raw) {
-      final es = List<dynamic>.from(raw['episodes'] ?? const []);
-      es.removeWhere((x) => x is Map && x['id'] == id);
-      es.add(ep);
-      raw['episodes'] = es;
-    }, _editingId == null ? 'Episode published.' : 'Episode updated.');
-
-    _resetForm();
-    setState(() => _info = null);
+  Widget _badge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(text,
+          style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: color)),
+    );
   }
 
   Widget _dropdown<T>({
