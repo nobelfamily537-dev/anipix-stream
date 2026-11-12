@@ -19,7 +19,7 @@ const String kShareText =
     '💬 Join our Telegram: https://t.me/Anipix_stream';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '2.9.3';
+const String kAppVersion = '2.9.4';
 
 class Api {
   /// Tells the admin that an episode does not play.
@@ -116,6 +116,13 @@ class Api {
           lastError = Exception('Unexpected library format');
           continue;
         }
+        /* guard against mojibake (Â / Ã) coming from a broken proxy */
+        final rawText = jsonEncode(decoded);
+        if (rawText.contains('Ã') || rawText.contains('Â')) {
+          lastError = Exception('Bad text encoding from $src');
+          continue;
+        }
+
         lastRaw = decoded;
         final lib = Library.fromJson(decoded);
         if (lib.version == 0 && lib.playlists.isEmpty) {

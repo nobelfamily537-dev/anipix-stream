@@ -1,5 +1,5 @@
 {
-  "version": "2.9.3",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.9.3/app-release.apk",
-  "notes": "Newly published episodes appear immediately (fresh library via the worker)"
+  "version": "2.9.4",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v2.9.4/app-release.apk",
+  "notes": "Skips a broken-encoding source and falls back"
 }
