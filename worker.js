@@ -519,7 +519,7 @@ export default {
         ok: true,
         publishKey: !!(env.PUBLISH_KEY || PUBLISH_KEY_SHA256),
         githubToken: !!env.GITHUB_TOKEN,
-        version: 'v2026-11-12-tg4',
+        version: 'v2026-11-12-tg5',
       }));
     }
     if (url.pathname === '/api/test-tg') {
