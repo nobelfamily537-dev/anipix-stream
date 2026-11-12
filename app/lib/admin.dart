@@ -849,6 +849,48 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     setState(() {});
   }
 
+  TextEditingController? _uploadTarget;
+
+  Future<void> _uploadTo(TextEditingController target) async {
+    if (_accounts.isEmpty) {
+      setState(() => _info = 'Add a UFOLOAD account first (Settings tab).');
+      return;
+    }
+    if (_accIdx >= _accounts.length) _accIdx = 0;
+    final acc = _accounts[_accIdx];
+    try {
+      final picked = await FilePicker.platform.pickFiles(type: FileType.video);
+      final path = picked?.files.single.path;
+      if (path == null) return;
+
+      _uploadTarget = target;
+      UploadTracker.i.add(UploadJob(name: path.split('/').last));
+      setState(() {
+        _uploading = true;
+        _info = 'Uploading — Uploader tab par live progress dekho';
+      });
+
+      final started = await VideoUploader.start(
+        path: path,
+        key: acc.key,
+        name: path.split('/').last,
+      );
+      if (!started) {
+        UploadTracker.i.fail('Could not start');
+        setState(() {
+          _uploading = false;
+          _info = 'Upload could not start.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _info = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
   void _resetForm() {
     _editingId = null;
     _title.clear();
@@ -958,12 +1000,10 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     for (final j in UploadTracker.i.jobs) {
       if (j.status == 'done' && j.url != null) {
         final u = j.url!;
-        if (_w480.text != u && _w720.text != u) {
-          if (_w480.text.trim().isEmpty) {
-            _w480.text = u;
-          } else if (_w720.text.trim().isEmpty) {
-            _w720.text = u;
-          }
+        final target = _uploadTarget;
+        if (target != null && target.text != u) {
+          target.text = u;
+          _uploadTarget = null;
         }
       }
     }
@@ -1055,10 +1095,10 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
             ),
           ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
         Row(
           children: [
-            const Text('Upload video',
+            const Text('Upload account',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
             const Spacer(),
             if (_uploading)
@@ -1085,23 +1125,6 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
             ],
             onChanged: (v) => setState(() => _accIdx = v ?? 0),
           ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 42,
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: kBrand.withOpacity(0.6)),
-              foregroundColor: kBrand,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: _uploading ? null : _upload,
-            icon: _uploading
-                ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.cloud_upload_outlined, size: 17),
-            label: Text(_uploading ? 'Uploading…' : 'Pick video & upload to UFOLOAD',
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-          ),
-        ),
         if (_info != null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
@@ -1111,12 +1134,14 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
         const SizedBox(height: 18),
         const Text('Watch links', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        const Text('Embed link paste karo — jo quality doge wahi app mein dikhegi.',
+        const Text('Embed link paste karo, ya neeche se video upload karo.',
             style: TextStyle(fontSize: 11, color: kMuted)),
         const SizedBox(height: 10),
         _linkField('480p link', _w480, 'https://…480p'),
-        const SizedBox(height: 10),
+        _uploadChip(_w480, 'Upload 480p video'),
+        const SizedBox(height: 12),
         _linkField('720p link', _w720, 'https://…720p'),
+        _uploadChip(_w720, 'Upload 720p video'),
 
         const SizedBox(height: 20),
         const Text('Download links (optional)',
@@ -1159,6 +1184,26 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
         else
           for (final e in episodes) _episodeTile(e),
       ],
+    );
+  }
+
+  Widget _uploadChip(TextEditingController target, String label) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        height: 34,
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: kBrand.withOpacity(0.5)),
+            foregroundColor: kBrand,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          onPressed: _uploading ? null : () => _uploadTo(target),
+          icon: const Icon(Icons.cloud_upload_outlined, size: 14),
+          label: Text(label, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+        ),
+      ),
     );
   }
 
