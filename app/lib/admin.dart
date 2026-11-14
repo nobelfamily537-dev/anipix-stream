@@ -31,6 +31,60 @@ class AdminService {
     await p.setString(_keyPref, key.trim());
   }
 
+  /// Sends a Telegram post (playlist or custom) through the worker.
+  static Future<String> sendTelegramPost(Map<String, dynamic> body) async {
+    final key = await savedKey() ?? '';
+    if (key.isEmpty) return 'Publish key required.';
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$kBaseUrl/api/post'),
+            headers: {'content-type': 'application/json', 'x-publish-key': key},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 40));
+      final j = jsonDecode(res.body);
+      if (res.statusCode == 200 && j is Map && j['ok'] == true) return '';
+      return (j is Map ? (j['error'] ?? 'Send failed') : 'Send failed').toString();
+    } catch (e) {
+      return 'Network error: $e';
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchPosts() async {
+    final key = await savedKey() ?? '';
+    if (key.isEmpty) return [];
+    try {
+      final res = await http
+          .get(Uri.parse('$kBaseUrl/api/post?key=$key'))
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return [];
+      final j = jsonDecode(res.body);
+      final list = (j is Map) ? j['posts'] : null;
+      if (list is! List) return [];
+      return list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<bool> deletePost(String id) async {
+    final key = await savedKey() ?? '';
+    if (key.isEmpty) return false;
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$kBaseUrl/api/post/delete'),
+            headers: {'content-type': 'application/json', 'x-publish-key': key},
+            body: jsonEncode({'id': id}),
+          )
+          .timeout(const Duration(seconds: 20));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Uploads an image to the repo through the worker and returns its URL.
   static Future<String> uploadImage(String path) async {
     final key = await savedKey() ?? '';
@@ -342,7 +396,7 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 4, vsync: this);
+  late final TabController _tabs = TabController(length: 5, vsync: this);
   final _key = TextEditingController();
   bool _busy = false;
   String? _message;
@@ -421,6 +475,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             Tab(text: 'Playlists'),
             Tab(text: 'Episodes'),
             Tab(text: 'Uploader'),
+            Tab(text: 'Posts'),
             Tab(text: 'Settings'),
           ],
         ),
@@ -459,6 +514,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                       _PlaylistsTab(lib: lib, onPublish: _publish),
                       _EpisodesTab(lib: lib, onPublish: _publish),
                       const _UploaderTab(),
+                      _PostsTab(lib: lib),
                       _SettingsTab(lib: lib, onPublish: _publish),
                     ],
                   ),
@@ -1465,6 +1521,294 @@ class _UploaderTabState extends State<_UploaderTab> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/* -------------------------------------------------------------- posts */
+
+class _PostsTab extends StatefulWidget {
+  final Library lib;
+  const _PostsTab({required this.lib});
+
+  @override
+  State<_PostsTab> createState() => _PostsTabState();
+}
+
+class _PostsTabState extends State<_PostsTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  String? _pid;
+  final _caption = TextEditingController();
+  final _url = TextEditingController();
+  final _btnText = TextEditingController(text: '▶️ Watch Now');
+  String _image = '';
+  bool _busy = false;
+  String? _msg;
+  bool _okMsg = false;
+  List<Map<String, dynamic>> _posts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPosts();
+  }
+
+  Future<void> _loadPosts() async {
+    final list = await AdminService.fetchPosts();
+    if (mounted) setState(() => _posts = list);
+  }
+
+  @override
+  void dispose() {
+    _caption.dispose();
+    _url.dispose();
+    _btnText.dispose();
+    super.dispose();
+  }
+
+  void _say(String m, {bool ok = false}) => setState(() {
+        _msg = m;
+        _okMsg = ok;
+      });
+
+  Future<void> _sendPlaylist() async {
+    final pid = _pid;
+    if (pid == null) return _say('Pick a playlist.');
+    setState(() => _busy = true);
+    final err = await AdminService.sendTelegramPost({'type': 'playlist', 'playlistId': pid});
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err.isEmpty) {
+      _say('Post sent to Telegram ✅', ok: true);
+      _loadPosts();
+    } else {
+      _say(err);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.image);
+    final path = picked?.files.single.path;
+    if (path == null) return;
+    _say('Uploading image…');
+    final url = await AdminService.uploadImage(path);
+    if (!mounted) return;
+    if (url.isEmpty) {
+      _say('Image upload failed.');
+    } else {
+      setState(() => _image = url);
+      _say('Image ready ✅', ok: true);
+    }
+  }
+
+  Future<void> _sendCustom() async {
+    if (_caption.text.trim().isEmpty) return _say('Caption likho.');
+    setState(() => _busy = true);
+    final err = await AdminService.sendTelegramPost({
+      'type': 'custom',
+      'caption': _caption.text.trim(),
+      'image': _image,
+      'url': _url.text.trim(),
+      'buttonText': _btnText.text.trim(),
+    });
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err.isEmpty) {
+      _say('Post sent to Telegram ✅', ok: true);
+      _caption.clear();
+      _url.clear();
+      setState(() => _image = '');
+      _loadPosts();
+    } else {
+      _say(err);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final playlists = widget.lib.playlists;
+    if (_pid == null && playlists.isNotEmpty) _pid = playlists.first.id;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+      children: [
+        if (_msg != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(_msg!,
+                style: TextStyle(fontSize: 12, color: _okMsg ? kBrand : const Color(0xFFFF9D9D))),
+          ),
+
+        /* ---- playlist post ---- */
+        const Text('Post a playlist', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text('Banner + saare episodes + buttons ke saath Telegram par jayega.',
+            style: TextStyle(fontSize: 11.5, color: kMuted)),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: kSurface2,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: kLine),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _pid,
+              isExpanded: true,
+              dropdownColor: kSurface,
+              items: [
+                for (final p in playlists)
+                  DropdownMenuItem(
+                      value: p.id,
+                      child: Text(p.title, style: const TextStyle(fontSize: 13))),
+              ],
+              onChanged: (v) => setState(() => _pid = v),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 42,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kBrand,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _busy ? null : _sendPlaylist,
+            icon: const Icon(Icons.send, size: 17),
+            label: const Text('Send playlist post',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+          ),
+        ),
+
+        const SizedBox(height: 26),
+        /* ---- custom post ---- */
+        const Text('Custom post', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text('Apni banner image + caption + link.',
+            style: TextStyle(fontSize: 11.5, color: kMuted)),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: _pickImage,
+          child: Container(
+            height: 130,
+            decoration: BoxDecoration(
+              color: kSurface2,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: kLine),
+              image: _image.isNotEmpty
+                  ? DecorationImage(image: NetworkImage(_image), fit: BoxFit.cover)
+                  : null,
+            ),
+            alignment: Alignment.center,
+            child: _image.isEmpty
+                ? const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_photo_alternate_outlined, size: 26, color: kBrand),
+                      SizedBox(height: 6),
+                      Text('Banner image chuno',
+                          style: TextStyle(fontSize: 12, color: kMuted)),
+                    ],
+                  )
+                : null,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _caption,
+          maxLines: 4,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            labelText: 'Caption (HTML allowed: <b>, <i>)',
+            hintText: '🔥 Naya episode aa gaya!',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _url,
+          keyboardType: TextInputType.url,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            labelText: 'Button link (optional)',
+            hintText: 'https://…',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _btnText,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(labelText: 'Button text', isDense: true),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 42,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kBrand,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _busy ? null : _sendCustom,
+            icon: const Icon(Icons.send, size: 17),
+            label: const Text('Send custom post',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+          ),
+        ),
+
+        const SizedBox(height: 28),
+        Row(
+          children: [
+            const Text('Sent posts', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+            const Spacer(),
+            TextButton(onPressed: _loadPosts, child: const Text('Refresh', style: TextStyle(fontSize: 12))),
+          ],
+        ),
+        if (_posts.isEmpty)
+          const Text('Abhi tak koi post nahi.', style: TextStyle(fontSize: 12, color: kMuted))
+        else
+          for (final p in _posts)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: kSurface2,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kLine),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text((p['label'] ?? '').toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                        Text((p['at'] ?? '').toString().replaceFirst('T', ' ').split('.').first,
+                            style: const TextStyle(fontSize: 10.5, color: kMuted)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF8A8A)),
+                    onPressed: () async {
+                      final ok = await AdminService.deletePost((p['id'] ?? '').toString());
+                      if (ok) _loadPosts();
+                    },
+                  ),
+                ],
+              ),
+            ),
+      ],
     );
   }
 }

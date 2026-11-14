@@ -392,6 +392,184 @@ async function notifyTelegram(env, lib, newEps) {
   }
 }
 
+
+/* ---------------- manual Telegram posts ---------------- */
+const POSTS_PATH = 'posts.json';
+
+async function readPosts(env) {
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/${POSTS_PATH}?t=${Date.now()}`);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return Array.isArray(j) ? j : [];
+  } catch (e) { return []; }
+}
+
+async function writePosts(env, list) {
+  const headers = {
+    authorization: `Bearer ${env.GITHUB_TOKEN}`,
+    accept: 'application/vnd.github+json',
+    'user-agent': 'anipix-posts',
+    'content-type': 'application/json',
+  };
+  const api = `https://api.github.com/repos/${REPO}/contents/${POSTS_PATH}`;
+  let sha;
+  try {
+    const cur = await fetch(api, { headers });
+    if (cur.ok) sha = (await cur.json()).sha;
+  } catch (e) { /* ignore */ }
+  await fetch(api, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      message: 'posts: update',
+      content: toBase64(JSON.stringify(list)),
+      branch: BRANCH,
+      ...(sha ? { sha } : {}),
+    }),
+  });
+}
+
+async function handlePosts(request, env, url) {
+  if (request.method === 'GET') {
+    const key = url.searchParams.get('key') || '';
+    const kh = key ? await sha256Hex(key) : '';
+    if (!((env.PUBLISH_KEY && key === env.PUBLISH_KEY) || kh === PUBLISH_KEY_SHA256)) {
+      return json(JSON.stringify({ ok: false, error: 'wrong key' }), 401);
+    }
+    const list = await readPosts(env);
+    return json(JSON.stringify({ ok: true, posts: list.slice(-50).reverse() }));
+  }
+
+  if (request.method !== 'POST') return json(JSON.stringify({ ok: false, error: 'POST only' }), 405);
+
+  const key = request.headers.get('x-publish-key') || '';
+  const kh = key ? await sha256Hex(key) : '';
+  if (!((env.PUBLISH_KEY && key === env.PUBLISH_KEY) || kh === PUBLISH_KEY_SHA256)) {
+    return json(JSON.stringify({ ok: false, error: 'wrong key' }), 401);
+  }
+  if (!env.TELEGRAM_TOKEN) return json(JSON.stringify({ ok: false, error: 'TELEGRAM_TOKEN missing' }), 500);
+
+  let body;
+  try { body = await request.json(); } catch (e) { body = null; }
+  if (!body) return json(JSON.stringify({ ok: false, error: 'bad body' }), 400);
+
+  const chat = env.TELEGRAM_CHAT || TG_CHAT_DEFAULT;
+  let caption = '';
+  let photo = '';
+  let kb = null;
+  let label = '';
+
+  if (body.type === 'playlist') {
+    let lib = {};
+    try {
+      const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/library.json?t=${Date.now()}`);
+      if (r.ok) lib = await r.json();
+    } catch (e) { lib = {}; }
+
+    const pl = (lib.playlists || []).find((p) => p.id === body.playlistId);
+    if (!pl) return json(JSON.stringify({ ok: false, error: 'playlist not found' }), 404);
+
+    const eps = (lib.episodes || []).filter((e) => e.playlistId === pl.id);
+    const seasons = [...new Set(eps.map((e) => e.season))].sort();
+    const nums = eps.map((e) => String(e.n).padStart(2, '0'));
+    const audio = (pl.audio && pl.audio.length ? pl.audio : ['Hindi']).join(' • ');
+    const genre = (pl.genres || []).slice(0, 6).join(' • ');
+    const quality = [...new Set(eps.flatMap((e) => (e.sources || []).map((x) => x.q)).filter(Boolean))].join(' • ');
+    const link = `${SITE}/#/detail/${pl.id}`;
+
+    caption = [
+      `🎬 <b>${esc(pl.title)}</b>`,
+      '',
+      seasons.length ? `📺 <b>Season:</b> ${seasons.join(', ')}` : '',
+      eps.length ? `🎞 <b>Episodes:</b> ${nums.join(', ')}  <i>(${eps.length} total)</i>` : '',
+      genre ? `🎭 <b>Genre:</b> ${esc(genre)}` : '',
+      `🔊 <b>Audio:</b> ${esc(audio)}`,
+      quality ? `📹 <b>Quality:</b> ${esc(quality)}` : '',
+      '',
+      '▶️ <b>Watch now on AniPix Stream</b>',
+    ].filter(Boolean).join('\n');
+
+    photo = isHttp(pl.banner) ? pl.banner : (pl.thumb || pl.banner || '');
+    kb = { inline_keyboard: [
+      [{ text: '🍿 Watch & Download', url: link }],
+      [{ text: '▶️ Watch Online', url: link }],
+      [{ text: '📱 Open in AniPix Stream App', url: APP_URL }],
+      [{ text: '💬 Join Our Group', url: GROUP_URL }],
+    ] };
+    label = pl.title;
+  } else {
+    caption = String(body.caption || '').slice(0, 900);
+    if (!caption) return json(JSON.stringify({ ok: false, error: 'caption required' }), 400);
+    photo = String(body.image || '');
+    const link = String(body.url || '').trim();
+    if (link) {
+      kb = { inline_keyboard: [[{ text: String(body.buttonText || '▶️ Open'), url: link }]] };
+    }
+    label = caption.split('\n')[0].replace(/<[^>]+>/g, '').slice(0, 60);
+  }
+
+  let res;
+  let method = 'sendMessage';
+  if (photo) {
+    const okPhoto = await sendPhotoSmart(env, chat, photo, caption, kb);
+    if (okPhoto) {
+      method = 'sendPhoto';
+      res = { ok: true };
+    }
+  }
+  if (method === 'sendMessage') {
+    const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chat,
+        text: caption,
+        parse_mode: 'HTML',
+        reply_markup: kb || undefined,
+        disable_web_page_preview: false,
+      }),
+    });
+    const t = await r.text();
+    res = { ok: r.ok, raw: t.slice(0, 300) };
+    if (!r.ok) return json(JSON.stringify({ ok: false, error: 'Telegram: ' + t.slice(0, 200) }), 502);
+  }
+
+  /* remember the message id so it can be deleted later */
+  let messageId = null;
+  try {
+    const list = await readPosts(env);
+    messageId = 'm' + Date.now();
+    list.push({ id: messageId, label, at: new Date().toISOString(), type: body.type || 'custom' });
+    await writePosts(env, list.slice(-100));
+  } catch (e) { /* ignore */ }
+
+  return json(JSON.stringify({ ok: true, id: messageId }));
+}
+
+async function handlePostDelete(request, env) {
+  const key = request.headers.get('x-publish-key') || '';
+  const kh = key ? await sha256Hex(key) : '';
+  if (!((env.PUBLISH_KEY && key === env.PUBLISH_KEY) || kh === PUBLISH_KEY_SHA256)) {
+    return json(JSON.stringify({ ok: false, error: 'wrong key' }), 401);
+  }
+  let body;
+  try { body = await request.json(); } catch (e) { body = null; }
+  const id = body && String(body.id || '');
+  if (!id) return json(JSON.stringify({ ok: false, error: 'id required' }), 400);
+
+  const list = await readPosts(env);
+  const next = list.filter((p) => p.id !== id);
+  await writePosts(env, next);
+
+  /* try to delete it in the channel too */
+  if (body.messageId && env.TELEGRAM_TOKEN) {
+    const chat = env.TELEGRAM_CHAT || TG_CHAT_DEFAULT;
+    await tg(env, 'deleteMessage', { chat_id: chat, message_id: body.messageId });
+  }
+  return json(JSON.stringify({ ok: true }));
+}
+
 /* ---------------- media upload (thumbnails / banners) ---------------- */
 async function handleMedia(request, env) {
   if (request.method !== 'POST') return json(JSON.stringify({ ok: false, error: 'POST only' }), 405);
@@ -552,6 +730,8 @@ export default {
       const body = await res.text();
       return json(JSON.stringify({ ok: res.ok, chat, telegram: body.slice(0, 500) }));
     }
+    if (url.pathname === '/api/post/delete') return handlePostDelete(request, env);
+    if (url.pathname === '/api/post') return handlePosts(request, env, url);
     if (url.pathname === '/api/report') return handleReport(request, env, url);
     if (url.pathname === '/api/media') return handleMedia(request, env);
     if (url.pathname === '/api/view') return handleView(request, env);
