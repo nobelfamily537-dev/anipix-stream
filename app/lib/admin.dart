@@ -1054,7 +1054,12 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
 
     widget.onPublish((raw) {
       final es = List<dynamic>.from(raw['episodes'] ?? const []);
-      es.removeWhere((x) => x is Map && x['id'] == id);
+      /* replace by id AND by playlist+season+number, so the same episode
+         can never appear twice */
+      es.removeWhere((x) =>
+          x is Map &&
+          (x['id'] == id ||
+              (x['playlistId'] == pid && x['season'] == _season && x['n'] == n)));
       es.add(ep);
       raw['episodes'] = es;
     }, _editingId == null ? 'Episode published.' : 'Episode updated.');
@@ -1114,8 +1119,39 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
                   const SizedBox(height: 6),
                   _dropdown<int>(
                     value: _season,
-                    items: [for (final s in seasons.toList()..sort()) MapEntry(s, 'Season $s')],
-                    onChanged: (v) {
+                    items: [
+                      for (final s in seasons.toList()..sort()) MapEntry(s, 'Season $s'),
+                      const MapEntry<int, String>(-1, '＋ New season…'),
+                    ],
+                    onChanged: (v) async {
+                      if (v == -1) {
+                        final c = TextEditingController(text: '${seasons.length + 1}');
+                        final n = await showDialog<int>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: kSurface,
+                            title: const Text('New season',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                            content: TextField(
+                              controller: c,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(fontSize: 13),
+                              decoration: const InputDecoration(labelText: 'Season number', isDense: true),
+                            ),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                              TextButton(
+                                  onPressed: () => Navigator.pop(ctx, int.tryParse(c.text.trim()) ?? 1),
+                                  child: const Text('OK')),
+                            ],
+                          ),
+                        );
+                        if (n != null) {
+                          setState(() => _season = n);
+                          _syncFromExisting();
+                        }
+                        return;
+                      }
                       setState(() => _season = v ?? 1);
                       _syncFromExisting();
                     },
