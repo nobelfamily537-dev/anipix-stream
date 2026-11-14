@@ -1859,6 +1859,132 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
     super.dispose();
   }
 
+  String _playlistTitle(String id) {
+    for (final p in widget.lib.playlists) {
+      if (p.id == id) return p.title;
+    }
+    return 'Playlist';
+  }
+
+  void _saveSlides(List<Map<String, dynamic>> slides) {
+    widget.onPublish((raw) {
+      final prev = (raw['home'] is Map) ? Map<String, dynamic>.from(raw['home'] as Map) : <String, dynamic>{};
+      raw['home'] = {...prev, 'heroSlides': slides};
+    }, 'Home banner saved.');
+  }
+
+  List<Map<String, dynamic>> _currentSlides() => widget.lib.home.heroSlides
+      .map((s) => {
+            'id': s.id,
+            'type': s.type,
+            'playlistId': s.playlistId,
+            'image': s.image,
+            'title': s.title,
+            'subtitle': s.subtitle,
+            'url': s.url,
+          })
+      .toList();
+
+  void _removeSlide(String id) {
+    final list = _currentSlides()..removeWhere((s) => s['id'] == id);
+    _saveSlides(list);
+  }
+
+  Future<void> _addSlideFromPlaylist(BuildContext context) async {
+    if (widget.lib.playlists.isEmpty) return;
+    String pid = widget.lib.playlists.first.id;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Banner from playlist', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: DropdownButton<String>(
+          value: pid,
+          isExpanded: true,
+          dropdownColor: kSurface,
+          items: [
+            for (final p in widget.lib.playlists)
+              DropdownMenuItem(value: p.id, child: Text(p.title, style: const TextStyle(fontSize: 13))),
+          ],
+          onChanged: (v) => pid = v ?? pid,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final list = _currentSlides()
+      ..add({
+        'id': 'h${DateTime.now().millisecondsSinceEpoch}',
+        'type': 'playlist',
+        'playlistId': pid,
+        'image': '',
+        'title': '',
+        'subtitle': '',
+        'url': '',
+      });
+    _saveSlides(list);
+  }
+
+  Future<void> _addCustomSlide(BuildContext context) async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.image);
+    final path = picked?.files.single.path;
+    if (path == null) return;
+    final url = await AdminService.uploadImage(path);
+    if (!mounted) return;
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Image upload failed.')),
+      );
+      return;
+    }
+    final title = TextEditingController();
+    final link = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Custom banner', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: title,
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(labelText: 'Title', isDense: true),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: link,
+              keyboardType: TextInputType.url,
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(
+                  labelText: 'Link (optional)', hintText: 'https://…', isDense: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final list = _currentSlides()
+      ..add({
+        'id': 'h${DateTime.now().millisecondsSinceEpoch}',
+        'type': 'custom',
+        'playlistId': '',
+        'image': url,
+        'title': title.text.trim(),
+        'subtitle': '',
+        'url': link.text.trim(),
+      });
+    _saveSlides(list);
+  }
+
   Future<void> _backup(BuildContext context) async {
     final accs = await UfoloadService.accounts();
     final data = {
@@ -2188,6 +2314,72 @@ class _SettingsTabState extends State<_SettingsTab> with AutomaticKeepAliveClien
                 ],
               ),
             ),
+        const SizedBox(height: 28),
+        const Text('Home banner slides', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text('Home ke bade banner mein jo dikhe — playlist se ya apni image+link se.',
+            style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.4)),
+        const SizedBox(height: 10),
+        for (final sl in widget.lib.home.heroSlides)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: kSurface2,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: kLine),
+            ),
+            child: Row(
+              children: [
+                Icon(sl.type == 'custom' ? Icons.image : Icons.play_circle_outline,
+                    size: 16, color: kBrand),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    sl.type == 'custom'
+                        ? (sl.title.isEmpty ? 'Custom banner' : sl.title)
+                        : _playlistTitle(sl.playlistId),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 17, color: Color(0xFFFF8A8A)),
+                  onPressed: () => _removeSlide(sl.id),
+                ),
+              ],
+            ),
+          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: kBrand.withOpacity(0.55)),
+                  foregroundColor: kBrand,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('From playlist', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                onPressed: () => _addSlideFromPlaylist(context),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: kBrand.withOpacity(0.55)),
+                  foregroundColor: kBrand,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.add_photo_alternate_outlined, size: 16),
+                label: const Text('Custom banner', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                onPressed: () => _addCustomSlide(context),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 22),
         const Text('Backup & restore',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),

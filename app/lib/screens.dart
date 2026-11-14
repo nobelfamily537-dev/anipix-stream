@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -200,7 +201,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
           ),
         const SizedBox(height: 10),
-        _HeroCard(playlist: hero, library: lib),
+        if (layout.heroSlides.isEmpty)
+          _HeroCard(playlist: hero, library: lib)
+        else
+          _HeroSlides(slides: layout.heroSlides, library: lib),
 
         /* categories */
         const SectionTitle('Categories'),
@@ -268,6 +272,152 @@ class _CountryTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(7),
       ),
       child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+class _HeroSlides extends StatefulWidget {
+  final List<HeroSlide> slides;
+  final Library library;
+  const _HeroSlides({required this.slides, required this.library});
+
+  @override
+  State<_HeroSlides> createState() => _HeroSlidesState();
+}
+
+class _HeroSlidesState extends State<_HeroSlides> {
+  final _pc = PageController(viewportFraction: 0.94);
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _pc.dispose();
+    super.dispose();
+  }
+
+  void _open(HeroSlide slide) {
+    if (slide.type == 'custom') {
+      if (slide.url.isNotEmpty) launchUrl(Uri.parse(slide.url), mode: LaunchMode.externalApplication);
+      return;
+    }
+    final pl = widget.library.playlists.where((p) => p.id == slide.playlistId).cast<Playlist?>().firstWhere(
+          (p) => true,
+          orElse: () => null,
+        );
+    if (pl == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => PlaylistScreen(playlistId: pl.id)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 250,
+          child: PageView.builder(
+            controller: _pc,
+            itemCount: widget.slides.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            itemBuilder: (context, i) {
+              final slide = widget.slides[i];
+              Playlist? pl;
+              if (slide.type != 'custom') {
+                for (final p in widget.library.playlists) {
+                  if (p.id == slide.playlistId) pl = p;
+                }
+              }
+              final image = slide.image.isNotEmpty
+                  ? slide.image
+                  : (pl == null ? '' : (pl.banner.isNotEmpty ? pl.banner : pl.thumb));
+              final title = slide.title.isNotEmpty ? slide.title : (pl?.title ?? '');
+              final sub = slide.subtitle.isNotEmpty
+                  ? slide.subtitle
+                  : (pl == null ? '' : '${pl.year} · ${pl.genres.take(2).join(', ')}');
+
+              return GestureDetector(
+                onTap: () => _open(slide),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: kSurface2,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      AppImage(src: image, cacheWidth: 900, fallback: Container(color: kSurface2)),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, kBg.withOpacity(0.92)],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 14,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontSize: 15, fontWeight: FontWeight.w800)),
+                                  if (sub.isNotEmpty)
+                                    Text(sub,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 11.5, color: kMuted)),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: const BoxDecoration(color: kBrand, shape: BoxShape.circle),
+                              child: Icon(
+                                slide.type == 'custom' ? Icons.open_in_new : Icons.play_arrow,
+                                color: Colors.black,
+                                size: 24,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < widget.slides.length; i++)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: i == _page ? 16 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: i == _page ? kBrand : kLine,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

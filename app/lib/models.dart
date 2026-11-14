@@ -123,12 +123,43 @@ class HomeSection {
       );
 }
 
+class HeroSlide {
+  final String id;
+  final String type;      // playlist | custom
+  final String playlistId;
+  final String image;
+  final String title;
+  final String subtitle;
+  final String url;
+
+  const HeroSlide({
+    required this.id,
+    required this.type,
+    this.playlistId = '',
+    this.image = '',
+    this.title = '',
+    this.subtitle = '',
+    this.url = '',
+  });
+
+  factory HeroSlide.fromJson(Map<String, dynamic> j) => HeroSlide(
+        id: (j['id'] ?? '').toString(),
+        type: (j['type'] ?? 'playlist').toString(),
+        playlistId: (j['playlistId'] ?? '').toString(),
+        image: (j['image'] ?? '').toString(),
+        title: (j['title'] ?? '').toString(),
+        subtitle: (j['subtitle'] ?? '').toString(),
+        url: (j['url'] ?? '').toString(),
+      );
+}
+
 class HomeLayout {
   final List<String> tabs;
   final List<String> categories;
   final List<HomeSection> sections;
   final String announcement;
   final String heroId;
+  final List<HeroSlide> heroSlides;
 
   const HomeLayout({
     required this.tabs,
@@ -136,6 +167,7 @@ class HomeLayout {
     required this.sections,
     this.announcement = '',
     this.heroId = '',
+    this.heroSlides = const [],
   });
 
   static const HomeLayout fallback = HomeLayout(
@@ -161,6 +193,10 @@ class HomeLayout {
       sections: secs.isEmpty ? fallback.sections : secs,
       announcement: (j['announcement'] ?? '').toString(),
       heroId: (j['heroId'] ?? '').toString(),
+      heroSlides: ((j['heroSlides'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => HeroSlide.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
     );
   }
 }
