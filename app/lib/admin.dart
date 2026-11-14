@@ -140,6 +140,7 @@ class AdminService {
 
 /// One upload, tracked app-wide so it keeps showing while you navigate.
 class UploadJob {
+  final String id = DateTime.now().microsecondsSinceEpoch.toString();
   final String name;
   int total;
   int sent;
@@ -920,6 +921,7 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
   }
 
   TextEditingController? _uploadTarget;
+  UploadJob? _pendingJob;
 
   Future<void> _uploadTo(TextEditingController target) async {
     if (_accounts.isEmpty) {
@@ -934,7 +936,9 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
       if (path == null) return;
 
       _uploadTarget = target;
-      UploadTracker.i.add(UploadJob(name: path.split('/').last));
+      final job = UploadJob(name: path.split('/').last);
+      _pendingJob = job;
+      UploadTracker.i.add(job);
       setState(() {
         _uploading = true;
         _info = 'Uploading — Uploader tab par live progress dekho';
@@ -1067,14 +1071,17 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     final episodes = _pid == null ? <Episode>[] : widget.lib.episodesOf(_pid!);
     final seasons = <int>{1, for (final e in episodes) e.season};
 
-    for (final j in UploadTracker.i.jobs) {
-      if (j.status == 'done' && j.url != null) {
-        final u = j.url!;
+    final pending = _pendingJob;
+    if (pending != null) {
+      if (pending.status == 'done' && pending.url != null) {
+        final u = pending.url!;
         final target = _uploadTarget;
-        if (target != null && target.text != u) {
-          target.text = u;
-          _uploadTarget = null;
-        }
+        if (target != null && target.text != u) target.text = u;
+        _uploadTarget = null;
+        _pendingJob = null;
+      } else if (pending.status == 'failed' || pending.status == 'cancelled') {
+        _uploadTarget = null;
+        _pendingJob = null;
       }
     }
 

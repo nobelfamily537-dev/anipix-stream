@@ -19,7 +19,7 @@ const String kShareText =
     '💬 Join our Telegram: https://t.me/Anipix_stream';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '3.1.0';
+const String kAppVersion = '3.1.1';
 
 class Api {
   /// Tells the admin that an episode does not play.
