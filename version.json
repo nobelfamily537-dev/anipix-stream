@@ -1,5 +1,5 @@
 {
-  "version": "3.2.1",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v3.2.1/app-release.apk",
-  "notes": "Back on Start.io 5.4.0 (5.5.0 broke installs)"
+  "version": "3.3.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v3.3.0/app-release.apk",
+  "notes": "Start.io SDK 5.5.0 (latest)"
 }
