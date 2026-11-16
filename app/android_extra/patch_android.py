@@ -10,7 +10,7 @@ import sys
 
 BASE = 'app/android/app'
 STARTAPP_ID = '210377175'
-STARTAPP_SDK = '5.5.0'
+STARTAPP_SDK = '5.4.0'
 
 
 def patch_gradle():
