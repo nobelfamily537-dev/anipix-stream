@@ -36,6 +36,10 @@ class _AdvertiseScreenState extends State<AdvertiseScreen> {
   final _amountCtrl = TextEditingController(text: '300');
   final _viewsCtrl = TextEditingController(text: '5000');
 
+  bool _busy = false;
+  String? _msg;
+  bool _ok = false;
+
   static const int kCpmBanner = 60;
   static const int kCpmVideo = 200;
   static const int kMinTopup = 200;
