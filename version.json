@@ -1,5 +1,5 @@
 {
-  "version": "3.8.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v3.8.0/app-release.apk",
-  "notes": "Advertise: banner/video CPM packs plus a custom rupees-to-views calculator"
+  "version": "3.9.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v3.9.0/app-release.apk",
+  "notes": "Advertise flow: details -> views -> pay -> txn -> 48h message; admin prefill from request"
 }

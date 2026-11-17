@@ -1963,16 +1963,18 @@ class _AdsTabState extends State<_AdsTab> with AutomaticKeepAliveClientMixin {
     _load();
   }
 
-  Future<void> _edit([Map<String, dynamic>? existing]) async {
-    final name = TextEditingController(text: (existing?['name'] ?? '').toString());
-    final contact = TextEditingController(text: (existing?['contact'] ?? '').toString());
-    final link = TextEditingController(text: (existing?['link'] ?? '').toString());
-    final cta = TextEditingController(text: (existing?['cta'] ?? 'Visit').toString());
-    final videoUrl = TextEditingController(text: (existing?['videoUrl'] ?? '').toString());
-    final purchased = TextEditingController(text: (existing?['impressionsPurchased'] ?? 5000).toString());
-    final budget = TextEditingController(text: (existing?['budget'] ?? 0).toString());
-    String type = (existing?['type'] ?? 'banner').toString();
-    String image = (existing?['image'] ?? '').toString();
+  Future<void> _edit([Map<String, dynamic>? existing, Map<String, dynamic>? fromRequest]) async {
+    final src = existing ?? fromRequest;
+    final name = TextEditingController(text: (src?['name'] ?? '').toString());
+    final contact = TextEditingController(text: (src?['contact'] ?? '').toString());
+    final link = TextEditingController(text: (src?['link'] ?? '').toString());
+    final cta = TextEditingController(text: (src?['cta'] ?? 'Visit').toString());
+    final videoUrl = TextEditingController(text: (src?['videoUrl'] ?? '').toString());
+    final purchased = TextEditingController(
+        text: (src?['impressionsPurchased'] ?? src?['views'] ?? 5000).toString());
+    final budget = TextEditingController(text: (src?['budget'] ?? src?['amount'] ?? 0).toString());
+    String type = (src?['type'] ?? 'banner').toString() == 'video' ? 'video' : 'banner';
+    String image = (src?['image'] ?? '').toString();
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -2194,8 +2196,9 @@ class _AdsTabState extends State<_AdsTab> with AutomaticKeepAliveClientMixin {
                         await AdminService.adsAction({'action': 'request-status', 'id': id, 'status': 'approved'});
                         if (!mounted) return;
                         setState(() => _busy = false);
-                        _say('Request approved — ab ad banao (Add) aur approve karo.');
+                        _say('Request verified — ab ad banao aur Approve karo.');
                         _load();
+                        _edit(null, r);
                       },
                 child: const Text('Verify ✓', style: TextStyle(fontSize: 12, color: kBrand)),
               ),

@@ -1211,6 +1211,9 @@ class _Tab extends StatelessWidget {
 
 /* ---------------------------------------------------------------- player */
 
+/// Daily limits stay off until the plans go live.
+const bool kPlansEnabled = false;
+
 const Map<String, int> kPlanLimits = {
   'basic': 3,
   'basicmax': 8,
@@ -1379,6 +1382,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<bool> _checkDailyLimit() async {
+    /* plans are not live yet — flip this to true when they are */
+    if (!kPlansEnabled) return true;
     if (!FirebaseService.ready || !FirebaseService.signedIn) return true;
     final prof = await FirebaseService.profile();
     final plan = (prof['plan'] ?? 'basic').toString();

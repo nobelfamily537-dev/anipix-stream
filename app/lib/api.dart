@@ -19,23 +19,9 @@ const String kShareText =
     '💬 Join our Telegram: https://t.me/Anipix_stream';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '3.8.0';
+const String kAppVersion = '2.7.0';
 
 class Api {
-  /// Live (approved) direct-sold ads + donation settings.
-  static Future<List<AdItem>> fetchAds() async {
-    try {
-      final res = await http.get(Uri.parse('$kBaseUrl/api/ads')).timeout(const Duration(seconds: 15));
-      if (res.statusCode != 200) return [];
-      final j = jsonDecode(res.body);
-      final list = (j is Map) ? j['ads'] : null;
-      if (list is! List) return [];
-      return list.whereType<Map>().map((e) => AdItem.fromJson(Map<String, dynamic>.from(e))).toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
   /// Tells the admin that an episode does not play.
   static Future<bool> sendReport({
     required String playlistId,
@@ -111,8 +97,8 @@ class Api {
   /// from the admin panel) and falls back to the static file in the repo.
   static Future<Library> fetchLibrary() async {
     final sources = <String>[
-      '$kBaseUrl/api/library',   // worker: always fresh
       kGitHubRaw,
+      '$kBaseUrl/.netlify/functions/library',
       '$kBaseUrl/library.json',
     ];
     Object? lastError;
@@ -130,13 +116,6 @@ class Api {
           lastError = Exception('Unexpected library format');
           continue;
         }
-        /* guard against mojibake (Â / Ã) coming from a broken proxy */
-        final rawText = jsonEncode(decoded);
-        if (rawText.contains('Ã') || rawText.contains('Â')) {
-          lastError = Exception('Bad text encoding from $src');
-          continue;
-        }
-
         lastRaw = decoded;
         final lib = Library.fromJson(decoded);
         if (lib.version == 0 && lib.playlists.isEmpty) {
