@@ -9,6 +9,7 @@ import 'ads.dart';
 import 'admin.dart';
 import 'advertise.dart';
 import 'api.dart';
+import 'firebase_service.dart';
 import 'models.dart';
 import 'scope.dart';
 import 'store.dart';
@@ -1209,6 +1210,20 @@ class _Tab extends StatelessWidget {
 
 /* ---------------------------------------------------------------- player */
 
+const Map<String, int> kPlanLimits = {
+  'basic': 3,
+  'basicmax': 8,
+  'premium': 15,
+  'premiummax': 25,
+};
+
+const Map<String, String> kPlanNames = {
+  'basic': 'Basic (Free)',
+  'basicmax': 'Basic Max',
+  'premium': 'Premium',
+  'premiummax': 'Premium Max',
+};
+
 class PlayerScreen extends StatefulWidget {
   final Playlist playlist;
   final List<Episode> episodes;
@@ -1244,6 +1259,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     /* rewarded video on every episode open; fall back to an interstitial
        when Start.io has no rewarded fill for this user */
     Api.countView(_episode.id);
+    /* daily limit check, then the 5-minute watch timer */
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final allowed = await _checkDailyLimit();
+      if (!mounted) return;
+      if (!allowed) {
+        Navigator.of(context).maybePop();
+        return;
+      }
+      _startWatchTimer();
+    });
     Ads.rewarded().then((ok) {
       if (!ok) Ads.interstitial();
     });
@@ -1288,6 +1313,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _watchTimer?.cancel();
     _video?.dispose();
     super.dispose();
   }
@@ -1334,6 +1360,56 @@ class _PlayerScreenState extends State<PlayerScreen> {
         duration: const Duration(seconds: 3),
       ),
     );
+  }
+
+  Timer? _watchTimer;
+
+  /// Counts the episode only if it was watched for 5+ minutes.
+  void _startWatchTimer() {
+    _watchTimer?.cancel();
+    _watchTimer = Timer(const Duration(minutes: 5), () async {
+      if (!mounted) return;
+      final n = await FirebaseService.bumpDaily();
+      if (!mounted || n == 0) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Aaj ka episode count hua ($n)'), duration: const Duration(seconds: 2)),
+      );
+    });
+  }
+
+  Future<bool> _checkDailyLimit() async {
+    if (!FirebaseService.ready || !FirebaseService.signedIn) return true;
+    final prof = await FirebaseService.profile();
+    final plan = (prof['plan'] ?? 'basic').toString();
+    final limit = kPlanLimits[plan] ?? 3;
+    final used = await FirebaseService.dailyCount();
+    if (used < limit) return true;
+
+    if (!mounted) return false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('Daily limit reached', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: Text(
+          'Aapka ${kPlanNames[plan] ?? plan} plan din mein $limit episodes deta hai.\n'
+          'Kal wapas aao, ya plan upgrade karo.',
+          style: const TextStyle(fontSize: 13, color: kMuted, height: 1.5),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              launchUrl(Uri.parse('https://t.me/lovelyanime_admin'),
+                  mode: LaunchMode.externalApplication);
+            },
+            child: const Text('Upgrade', style: TextStyle(color: kBrand)),
+          ),
+        ],
+      ),
+    );
+    return false;
   }
 
   Widget _pillButton({
