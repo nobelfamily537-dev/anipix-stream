@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -6,6 +7,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import 'ads.dart';
 import 'admin.dart';
+import 'advertise.dart';
 import 'api.dart';
 import 'models.dart';
 import 'scope.dart';
@@ -2038,6 +2040,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const Text('Server aur bandwidth ka kharcha aapke support se chalta hai.',
                     style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.4)),
                 const SizedBox(height: 10),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                    child: QrImageView(
+                      data: upiLink(note: 'AniPix support'),
+                      size: 150,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
@@ -2069,6 +2083,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const Text('UPI app mein daal kar payment karo — koi minimum nahi.',
                     style: TextStyle(fontSize: 10.5, color: kMuted)),
               ],
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.campaign_outlined, color: kMuted, size: 20),
+            title: const Text('Advertise with us', style: TextStyle(fontSize: 13.5)),
+            subtitle: const Text('Apna banner app par lagwao', style: TextStyle(fontSize: 11, color: kMuted)),
+            trailing: const Icon(Icons.chevron_right, color: kMuted, size: 18),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdvertiseScreen()),
             ),
           ),
           ListTile(
@@ -2147,9 +2170,13 @@ class SupportScreen extends StatelessWidget {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const WebPageScreen(url: kSupportUrl)),
-              ),
+              onPressed: () async {
+                final uri = Uri.parse(kSupportUrl);
+                final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+                if (!ok && context.mounted) {
+                  await launchUrl(uri, mode: LaunchMode.platformDefault);
+                }
+              },
               child: const Text('Open Telegram'),
             ),
           ),

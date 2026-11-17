@@ -1912,6 +1912,7 @@ class _AdsTabState extends State<_AdsTab> with AutomaticKeepAliveClientMixin {
   bool get wantKeepAlive => true;
 
   List<Map<String, dynamic>> _ads = [];
+  List<Map<String, dynamic>> _requests = [];
   Map<String, int> _served = {};
   String _upi = 'lavkushkumar3258@naviaxis';
   int _minTopup = 200;
@@ -1931,6 +1932,11 @@ class _AdsTabState extends State<_AdsTab> with AutomaticKeepAliveClientMixin {
     if (!mounted) return;
     setState(() {
       _ads = (data['advertisers'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      _requests = ((data['requests'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((e) => (e['status'] ?? 'pending') == 'pending')
+          .toList();
       _served = views;
       _upi = (st['upi'] ?? 'lavkushkumar3258@naviaxis').toString();
       _minTopup = (st['minTopup'] as num?)?.toInt() ?? 200;
@@ -2117,6 +2123,13 @@ class _AdsTabState extends State<_AdsTab> with AutomaticKeepAliveClientMixin {
         const Text('Approve karne ke baad hi ad app mein dikhega.',
             style: TextStyle(fontSize: 11.5, color: kMuted)),
         const SizedBox(height: 12),
+        if (_requests.isNotEmpty) ...[
+          const Text('Advertiser requests (verify karke approve karo)',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          for (final r in _requests) _requestCard(r),
+          const SizedBox(height: 18),
+        ],
         if (_ads.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 30),
@@ -2141,6 +2154,67 @@ class _AdsTabState extends State<_AdsTab> with AutomaticKeepAliveClientMixin {
         Text('Minimum top-up: ₹$_minTopup',
             style: const TextStyle(fontSize: 11.5, color: kMuted)),
       ],
+    );
+  }
+
+  Widget _requestCard(Map<String, dynamic> r) {
+    final id = (r['id'] ?? '').toString();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: kBrand.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kBrand.withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text((r['name'] ?? '').toString(),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 3),
+          Text('${r['plan'] ?? ''}  ·  ₹${r['amount'] ?? 0}',
+              style: const TextStyle(fontSize: 11, color: kMuted)),
+          Text('Contact: ${r['contact'] ?? ''}',
+              style: const TextStyle(fontSize: 11, color: kMuted)),
+          if ((r['link'] ?? '').toString().isNotEmpty)
+            Text('Link: ${r['link']}', style: const TextStyle(fontSize: 11, color: kMuted)),
+          Text('Txn: ${r['txnId'] ?? ''}',
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: kBrand)),
+          if ((r['note'] ?? '').toString().isNotEmpty)
+            Text((r['note'] ?? '').toString(), style: const TextStyle(fontSize: 11, color: kMuted)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              TextButton(
+                onPressed: _busy
+                    ? null
+                    : () async {
+                        setState(() => _busy = true);
+                        await AdminService.adsAction({'action': 'request-status', 'id': id, 'status': 'approved'});
+                        if (!mounted) return;
+                        setState(() => _busy = false);
+                        _say('Request approved — ab ad banao (Add) aur approve karo.');
+                        _load();
+                      },
+                child: const Text('Verify ✓', style: TextStyle(fontSize: 12, color: kBrand)),
+              ),
+              TextButton(
+                onPressed: _busy
+                    ? null
+                    : () async {
+                        setState(() => _busy = true);
+                        await AdminService.adsAction({'action': 'request-status', 'id': id, 'status': 'rejected'});
+                        if (!mounted) return;
+                        setState(() => _busy = false);
+                        _load();
+                      },
+                child: const Text('Reject', style: TextStyle(fontSize: 12, color: Color(0xFFFF8A8A))),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

@@ -1,5 +1,5 @@
 {
-  "version": "3.4.0",
-  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v3.4.0/app-release.apk",
-  "notes": "Advertiser system with approval + analytics, sponsor banner, donation card"
+  "version": "3.5.0",
+  "url": "https://github.com/nobelfamily537-dev/anipix-stream/releases/download/v3.5.0/app-release.apk",
+  "notes": "UPI QR, advertise-with-us form with txn id, admin verifies; support link fixed"
 }

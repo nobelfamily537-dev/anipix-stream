@@ -258,7 +258,12 @@ async function handleAds(request, env, url) {
     const isAdmin = (env.PUBLISH_KEY && key === env.PUBLISH_KEY) || kh === PUBLISH_KEY_SHA256;
 
     if (isAdmin) {
-      return json(JSON.stringify({ ok: true, advertisers: list, settings: data.settings || {} }));
+      return json(JSON.stringify({
+        ok: true,
+        advertisers: list,
+        requests: Array.isArray(data.requests) ? data.requests : [],
+        settings: data.settings || {},
+      }));
     }
     /* public: only live ads, no contact details */
     const live = list.filter(adLive).map((a) => ({
@@ -277,6 +282,30 @@ async function handleAds(request, env, url) {
     }));
   }
 
+  let body;
+  try { body = await request.json(); } catch (e) { body = null; }
+  if (!body) return json(JSON.stringify({ ok: false, error: 'bad body' }), 400);
+
+  /* a user asking to advertise — no key needed */
+  if (body.action === 'request') {
+    const req = {
+      id: 'req' + Date.now(),
+      name: String(body.name || '').slice(0, 80),
+      contact: String(body.contact || '').slice(0, 80),
+      link: String(body.link || '').slice(0, 300),
+      plan: String(body.plan || '').slice(0, 40),
+      amount: Number(body.amount) || 0,
+      txnId: String(body.txnId || '').slice(0, 80),
+      note: String(body.note || '').slice(0, 300),
+      status: 'pending',
+      at: new Date().toISOString(),
+    };
+    data.requests = Array.isArray(data.requests) ? data.requests : [];
+    data.requests.push(req);
+    await writeAds(env, data);
+    return json(JSON.stringify({ ok: true, id: req.id }));
+  }
+
   /* everything below is admin only */
   const key = request.headers.get('x-publish-key') || '';
   const kh = key ? await sha256Hex(key) : '';
@@ -284,9 +313,12 @@ async function handleAds(request, env, url) {
     return json(JSON.stringify({ ok: false, error: 'wrong key' }), 401);
   }
 
-  let body;
-  try { body = await request.json(); } catch (e) { body = null; }
-  if (!body) return json(JSON.stringify({ ok: false, error: 'bad body' }), 400);
+  if (body.action === 'request-status') {
+    data.requests = (Array.isArray(data.requests) ? data.requests : [])
+      .map((r) => (r.id === body.id ? Object.assign({}, r, { status: body.status }) : r));
+    await writeAds(env, data);
+    return json(JSON.stringify({ ok: true }));
+  }
 
   if (body.action === 'save') {
     const a = body.advertiser || {};
