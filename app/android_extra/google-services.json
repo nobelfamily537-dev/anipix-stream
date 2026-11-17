@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "613084071593",
+    "project_id": "anipix-stream",
+    "storage_bucket": "anipix-stream.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:613084071593:android:b18d9858b2848a1c7dcbb8",
+        "android_client_info": {
+          "package_name": "com.anipixstream.anipix_stream"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_D_zm1r8piGbx6_8pdfExnOaAB5WYHrA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

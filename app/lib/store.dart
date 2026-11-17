@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'firebase_service.dart';
+
 /// Local storage: accounts, session, watchlist, history.
 /// Everything stays on the device — there is no server behind this build.
 class Store {
@@ -65,6 +67,11 @@ class Store {
     if (users.any((u) => (u['email'] ?? '').toString().toLowerCase() == e)) {
       return 'That email is already registered.';
     }
+    /* real account on Firebase when it is available */
+    if (FirebaseService.ready) {
+      final err = await FirebaseService.signUp(n, e, pass);
+      if (err != null) return err;
+    }
     users.add({
       'name': n,
       'email': e,
@@ -78,6 +85,26 @@ class Store {
 
   Future<String?> signIn(String email, String pass) async {
     final e = email.trim().toLowerCase();
+
+    /* try the real account first */
+    if (FirebaseService.ready) {
+      final err = await FirebaseService.signIn(e, pass);
+      if (err == null) {
+        final users = _users;
+        if (!users.any((u) => (u['email'] ?? '').toString().toLowerCase() == e)) {
+          users.add({
+            'name': e.split('@').first,
+            'email': e,
+            'pass': hash(pass),
+            'createdAt': DateTime.now().millisecondsSinceEpoch,
+          });
+          await _saveUsers(users);
+        }
+        await _p?.setString('session', e);
+        return null;
+      }
+    }
+
     for (final u in _users) {
       if ((u['email'] ?? '').toString().toLowerCase() == e) {
         if ((u['pass'] ?? '') == hash(pass)) {

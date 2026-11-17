@@ -113,6 +113,44 @@ def patch_manifest():
             print('   ', line.strip())
 
 
+def patch_firebase():
+    import os, shutil
+
+    # 1) google-services.json next to the app module
+    src = os.path.join('app', 'android_extra', 'google-services.json')
+    dst = os.path.join(BASE, 'google-services.json')
+    if os.path.exists(src):
+        shutil.copyfile(src, dst)
+        print('google-services.json copied')
+
+    # 2) settings.gradle -> declare the plugin
+    for name in ('settings.gradle', 'settings.gradle.kts'):
+        p = os.path.join(BASE, '..', name)
+        if os.path.exists(p):
+            t = open(p, encoding='utf-8').read()
+            if 'google-services' not in t:
+                if 'plugins {' in t:
+                    t = t.replace('plugins {',
+                                  'plugins {\n    id "com.google.gms.google-services" version "4.4.2" apply false', 1)
+                open(p, 'w', encoding='utf-8').write(t)
+                print('settings.gradle patched')
+
+    # 3) app/build.gradle -> apply the plugin
+    for name in ('build.gradle', 'build.gradle.kts'):
+        p = os.path.join(BASE, name)
+        if not os.path.exists(p):
+            continue
+        t = open(p, encoding='utf-8').read()
+        if 'google-services' in t:
+            continue
+        if 'plugins {' in t:
+            t = t.replace('plugins {', 'plugins {\n    id "com.google.gms.google-services"', 1)
+        elif t.lstrip().startswith('apply plugin'):
+            t = 'apply plugin: "com.google.gms.google-services"\n' + t
+        open(p, 'w', encoding='utf-8').write(t)
+        print(name, 'patched for Firebase')
+
+
 def write_backup_rules():
     import os
     d = os.path.join(BASE, 'src', 'main', 'res', 'xml')
@@ -144,6 +182,7 @@ def main():
     patch_gradle()
     patch_manifest()
     write_backup_rules()
+    patch_firebase()
 
 
 if __name__ == '__main__':

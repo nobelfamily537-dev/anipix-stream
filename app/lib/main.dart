@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'ads.dart';
 import 'api.dart';
+import 'firebase_service.dart';
 import 'models.dart';
 import 'scope.dart';
 import 'screens.dart';
@@ -13,6 +15,13 @@ import 'update.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  /* Firebase is optional: if it fails the app still works offline/local */
+  try {
+    await Firebase.initializeApp();
+    FirebaseService.ready = true;
+  } catch (_) {
+    FirebaseService.ready = false;
+  }
   await Store.i.init();
   runApp(const AniPixApp());
 }
