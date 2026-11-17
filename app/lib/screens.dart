@@ -25,12 +25,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 3; // Anime
   UpdateInfo? _update;
+  AdItem? _ad;
+  bool _adCounted = false;
 
   @override
   void initState() {
     super.initState();
     UpdateService.check().then((info) {
       if (mounted && info != null) setState(() => _update = info);
+    });
+    Api.fetchAds().then((list) {
+      if (!mounted || list.isEmpty) return;
+      setState(() => _ad = list.first);
+      if (!_adCounted) {
+        _adCounted = true;
+        Api.countView('ad_${list.first.id}');
+      }
     });
   }
 
@@ -201,6 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
           ),
         const SizedBox(height: 10),
+        if (_ad != null) _SponsorCard(ad: _ad!),
         if (layout.heroSlides.isEmpty)
           _HeroCard(playlist: hero, library: lib)
         else
@@ -272,6 +283,64 @@ class _CountryTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(7),
       ),
       child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+class _SponsorCard extends StatelessWidget {
+  final AdItem ad;
+  const _SponsorCard({required this.ad});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        if (ad.link.isNotEmpty) launchUrl(Uri.parse(ad.link), mode: LaunchMode.externalApplication);
+      },
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: kSurface2,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kLine),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 46,
+                height: 46,
+                child: AppImage(src: ad.image, cacheWidth: 140, fallback: Container(color: kLine)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ad.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+                  const Text('Sponsored',
+                      style: TextStyle(fontSize: 9.5, color: kMuted, letterSpacing: .4)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kBrand.withOpacity(0.5)),
+              ),
+              child: Text(ad.cta,
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: kBrand)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1952,6 +2021,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           const SizedBox(height: 24),
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSurface2,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: kLine),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('❤️  Support AniPix Stream',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                const Text('Server aur bandwidth ka kharcha aapke support se chalta hai.',
+                    style: TextStyle(fontSize: 11.5, color: kMuted, height: 1.4)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: kSurface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: kLine),
+                        ),
+                        child: const SelectableText('lavkushkumar3258@naviaxis',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kBrand)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 17, color: kMuted),
+                      onPressed: () {
+                        Clipboard.setData(
+                            const ClipboardData(text: 'lavkushkumar3258@naviaxis'));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('UPI ID copied'), duration: Duration(seconds: 2)),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text('UPI app mein daal kar payment karo — koi minimum nahi.',
+                    style: TextStyle(fontSize: 10.5, color: kMuted)),
+              ],
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.support_agent, color: kMuted, size: 20),
             title: const Text('Contact support', style: TextStyle(fontSize: 13.5)),

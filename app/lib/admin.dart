@@ -31,6 +31,46 @@ class AdminService {
     await p.setString(_keyPref, key.trim());
   }
 
+  /* ---------------- advertisers ---------------- */
+
+  static Future<Map<String, dynamic>> fetchAdsAdmin() async {
+    final key = await savedKey() ?? '';
+    if (key.isEmpty) return {'advertisers': [], 'settings': {}};
+    try {
+      final res = await http
+          .get(Uri.parse('$kBaseUrl/api/ads?key=$key'))
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return {'advertisers': [], 'settings': {}};
+      final j = jsonDecode(res.body);
+      if (j is Map) {
+        return {
+          'advertisers': (j['advertisers'] as List? ?? const []),
+          'settings': (j['settings'] as Map? ?? const {}),
+        };
+      }
+    } catch (_) {}
+    return {'advertisers': [], 'settings': {}};
+  }
+
+  static Future<String> adsAction(Map<String, dynamic> body) async {
+    final key = await savedKey() ?? '';
+    if (key.isEmpty) return 'Publish key required.';
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$kBaseUrl/api/ads'),
+            headers: {'content-type': 'application/json', 'x-publish-key': key},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 25));
+      final j = jsonDecode(res.body);
+      if (res.statusCode == 200 && j is Map && j['ok'] == true) return '';
+      return (j is Map ? (j['error'] ?? 'Failed') : 'Failed').toString();
+    } catch (e) {
+      return 'Network error: $e';
+    }
+  }
+
   /// Sends a Telegram post (playlist or custom) through the worker.
   static Future<String> sendTelegramPost(Map<String, dynamic> body) async {
     final key = await savedKey() ?? '';
@@ -397,7 +437,7 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 5, vsync: this);
+  late final TabController _tabs = TabController(length: 6, vsync: this);
   final _key = TextEditingController();
   bool _busy = false;
   String? _message;
@@ -477,6 +517,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             Tab(text: 'Episodes'),
             Tab(text: 'Uploader'),
             Tab(text: 'Posts'),
+            Tab(text: 'Ads'),
             Tab(text: 'Settings'),
           ],
         ),
@@ -516,6 +557,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                       _EpisodesTab(lib: lib, onPublish: _publish),
                       const _UploaderTab(),
                       _PostsTab(lib: lib),
+                      const _AdsTab(),
                       _SettingsTab(lib: lib, onPublish: _publish),
                     ],
                   ),
@@ -1852,6 +1894,327 @@ class _PostsTabState extends State<_PostsTab> with AutomaticKeepAliveClientMixin
               ),
             ),
       ],
+    );
+  }
+}
+
+/* -------------------------------------------------------------- advertisers */
+
+class _AdsTab extends StatefulWidget {
+  const _AdsTab();
+
+  @override
+  State<_AdsTab> createState() => _AdsTabState();
+}
+
+class _AdsTabState extends State<_AdsTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  List<Map<String, dynamic>> _ads = [];
+  Map<String, int> _served = {};
+  String _upi = 'lavkushkumar3258@naviaxis';
+  int _minTopup = 200;
+  bool _busy = false;
+  String? _msg;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await AdminService.fetchAdsAdmin();
+    final views = await Api.fetchViews();
+    final st = Map<String, dynamic>.from(data['settings'] as Map? ?? {});
+    if (!mounted) return;
+    setState(() {
+      _ads = (data['advertisers'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      _served = views;
+      _upi = (st['upi'] ?? 'lavkushkumar3258@naviaxis').toString();
+      _minTopup = (st['minTopup'] as num?)?.toInt() ?? 200;
+    });
+  }
+
+  void _say(String m) => setState(() => _msg = m);
+
+  Future<void> _status(String id, String status) async {
+    setState(() => _busy = true);
+    final err = await AdminService.adsAction({'action': 'status', 'id': id, 'status': status});
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err.isNotEmpty) return _say(err);
+    _say(status == 'approved' ? 'Approved — ad live hai' : 'Status: $status');
+    _load();
+  }
+
+  Future<void> _delete(String id) async {
+    setState(() => _busy = true);
+    await AdminService.adsAction({'action': 'delete', 'id': id});
+    if (!mounted) return;
+    setState(() => _busy = false);
+    _load();
+  }
+
+  Future<void> _edit([Map<String, dynamic>? existing]) async {
+    final name = TextEditingController(text: (existing?['name'] ?? '').toString());
+    final contact = TextEditingController(text: (existing?['contact'] ?? '').toString());
+    final link = TextEditingController(text: (existing?['link'] ?? '').toString());
+    final cta = TextEditingController(text: (existing?['cta'] ?? 'Visit').toString());
+    final videoUrl = TextEditingController(text: (existing?['videoUrl'] ?? '').toString());
+    final purchased = TextEditingController(text: (existing?['impressionsPurchased'] ?? 5000).toString());
+    final budget = TextEditingController(text: (existing?['budget'] ?? 0).toString());
+    String type = (existing?['type'] ?? 'banner').toString();
+    String image = (existing?['image'] ?? '').toString();
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 26),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(existing == null ? 'New advertiser' : 'Edit advertiser',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 14),
+                _tf('Advertiser name', name, hint: 'Anime Merch Store'),
+                _tf('Contact (phone / telegram)', contact),
+                Row(
+                  children: [
+                    const Text('Type:', style: TextStyle(fontSize: 12.5, color: kMuted)),
+                    const SizedBox(width: 10),
+                    DropdownButton<String>(
+                      value: type,
+                      dropdownColor: kSurface,
+                      items: const [
+                        DropdownMenuItem(value: 'banner', child: Text('Banner', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'video', child: Text('Video ad', style: TextStyle(fontSize: 13))),
+                      ],
+                      onChanged: (v) => setLocal(() => type = v ?? 'banner'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await FilePicker.platform.pickFiles(type: FileType.image);
+                    final path = picked?.files.single.path;
+                    if (path == null) return;
+                    final url = await AdminService.uploadImage(path);
+                    if (url.isNotEmpty) setLocal(() => image = url);
+                  },
+                  child: Container(
+                    height: 110,
+                    decoration: BoxDecoration(
+                      color: kSurface2,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: kLine),
+                      image: image.isNotEmpty ? DecorationImage(image: NetworkImage(image), fit: BoxFit.cover) : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: image.isEmpty
+                        ? const Text('Banner image chuno', style: TextStyle(fontSize: 12, color: kMuted))
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _tf('Video ad URL (mp4, optional)', videoUrl),
+                _tf('Click link', link, hint: 'https://…'),
+                _tf('Button text', cta),
+                _tf('Impressions purchased', purchased, number: true),
+                _tf('Budget ₹', budget, number: true),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 44,
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kBrand,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () async {
+                      final err = await AdminService.adsAction({
+                        'action': 'save',
+                        'advertiser': {
+                          'id': existing?['id'],
+                          'name': name.text.trim(),
+                          'contact': contact.text.trim(),
+                          'type': type,
+                          'image': image,
+                          'videoUrl': videoUrl.text.trim(),
+                          'link': link.text.trim(),
+                          'cta': cta.text.trim(),
+                          'status': existing?['status'] ?? 'pending',
+                          'impressionsPurchased': int.tryParse(purchased.text.trim()) ?? 0,
+                          'budget': int.tryParse(budget.text.trim()) ?? 0,
+                        },
+                      });
+                      if (!ctx.mounted) return;
+                      if (err.isNotEmpty) {
+                        _say(err);
+                        return;
+                      }
+                      Navigator.pop(ctx, true);
+                    },
+                    child: const Text('Save advertiser', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (saved == true) {
+      _say('Saved. Approve karo tab ad chalega.');
+      _load();
+    }
+  }
+
+  Widget _tf(String label, TextEditingController c, {String? hint, bool number = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: c,
+        keyboardType: number ? TextInputType.number : TextInputType.text,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(labelText: label, hintText: hint, isDense: true),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+      children: [
+        Row(
+          children: [
+            const Text('Advertisers', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            const Spacer(),
+            TextButton(onPressed: _load, child: const Text('Refresh', style: TextStyle(fontSize: 12))),
+            TextButton.icon(
+              onPressed: () => _edit(),
+              icon: const Icon(Icons.add, size: 16, color: kBrand),
+              label: const Text('Add', style: TextStyle(fontSize: 12, color: kBrand)),
+            ),
+          ],
+        ),
+        if (_msg != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(_msg!, style: const TextStyle(fontSize: 12, color: kBrand)),
+          ),
+        const Text('Approve karne ke baad hi ad app mein dikhega.',
+            style: TextStyle(fontSize: 11.5, color: kMuted)),
+        const SizedBox(height: 12),
+        if (_ads.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 30),
+            child: Text('Koi advertiser nahi. Add dabao.',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, color: kMuted)),
+          )
+        else
+          for (final a in _ads) _card(a),
+        const SizedBox(height: 24),
+        const Text('Donation settings', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: TextEditingController(text: _upi),
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(labelText: 'UPI ID', isDense: true),
+          onSubmitted: (v) async {
+            await AdminService.adsAction({'action': 'settings', 'settings': {'upi': v.trim()}});
+            _load();
+          },
+        ),
+        const SizedBox(height: 8),
+        Text('Minimum top-up: ₹$_minTopup',
+            style: const TextStyle(fontSize: 11.5, color: kMuted)),
+      ],
+    );
+  }
+
+  Widget _card(Map<String, dynamic> a) {
+    final id = (a['id'] ?? '').toString();
+    final status = (a['status'] ?? 'pending').toString();
+    final bought = (a['impressionsPurchased'] as num?)?.toInt() ?? 0;
+    final served = _served['ad_$id'] ?? (a['impressionsServed'] as num?)?.toInt() ?? 0;
+    final left = bought - served;
+
+    Color c = kMuted;
+    if (status == 'approved') c = kBrand;
+    if (status == 'rejected') c = const Color(0xFFFF8A8A);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: kSurface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text((a['name'] ?? '').toString(),
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: c.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: c.withOpacity(0.5)),
+                ),
+                child: Text(status.toUpperCase(),
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: c)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('${a['type']} · ₹${a['budget'] ?? 0} · $served / $bought impressions',
+              style: const TextStyle(fontSize: 11, color: kMuted)),
+          Text(left > 0 ? '$left impressions bache' : 'Impressions poore ho gaye',
+              style: TextStyle(fontSize: 11, color: left > 0 ? kBrand : const Color(0xFFFF8A8A))),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (status != 'approved')
+                TextButton(
+                  onPressed: _busy ? null : () => _status(id, 'approved'),
+                  child: const Text('Approve', style: TextStyle(fontSize: 12, color: kBrand)),
+                ),
+              if (status == 'approved')
+                TextButton(
+                  onPressed: _busy ? null : () => _status(id, 'paused'),
+                  child: const Text('Pause', style: TextStyle(fontSize: 12, color: kMuted)),
+                ),
+              TextButton(
+                onPressed: _busy ? null : () => _edit(a),
+                child: const Text('Edit', style: TextStyle(fontSize: 12, color: kMuted)),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 17, color: Color(0xFFFF8A8A)),
+                onPressed: _busy ? null : () => _delete(id),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

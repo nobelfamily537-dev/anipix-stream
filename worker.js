@@ -200,6 +200,154 @@ async function handleLibrary(request, env) {
   return json(JSON.stringify({ ok: false, error: 'Method not allowed' }), 405);
 }
 
+
+/* ---------------- direct advertisers ---------------- */
+const ADS_PATH = 'ads.json';
+
+async function readAds(env) {
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/${ADS_PATH}?t=${Date.now()}`);
+    if (!r.ok) return { advertisers: [], settings: {} };
+    const j = await r.json();
+    return (j && typeof j === 'object') ? j : { advertisers: [], settings: {} };
+  } catch (e) { return { advertisers: [], settings: {} }; }
+}
+
+async function writeAds(env, data) {
+  const headers = {
+    authorization: `Bearer ${env.GITHUB_TOKEN}`,
+    accept: 'application/vnd.github+json',
+    'user-agent': 'anipix-ads',
+    'content-type': 'application/json',
+  };
+  const api = `https://api.github.com/repos/${REPO}/contents/${ADS_PATH}`;
+  let sha;
+  try {
+    const cur = await fetch(api, { headers });
+    if (cur.ok) sha = (await cur.json()).sha;
+  } catch (e) { /* ignore */ }
+  await fetch(api, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      message: 'ads: update',
+      content: toBase64(JSON.stringify(data)),
+      branch: BRANCH,
+      ...(sha ? { sha } : {}),
+    }),
+  });
+}
+
+function adLive(a) {
+  if (a.status !== 'approved') return false;
+  const served = a.impressionsServed || 0;
+  const bought = a.impressionsPurchased || 0;
+  if (bought > 0 && served >= bought) return false;
+  const now = Date.now();
+  if (a.endsAt && now > Date.parse(a.endsAt)) return false;
+  return true;
+}
+
+async function handleAds(request, env, url) {
+  const data = await readAds(env);
+  const list = Array.isArray(data.advertisers) ? data.advertisers : [];
+
+  if (request.method === 'GET') {
+    const key = url.searchParams.get('key') || '';
+    const kh = key ? await sha256Hex(key) : '';
+    const isAdmin = (env.PUBLISH_KEY && key === env.PUBLISH_KEY) || kh === PUBLISH_KEY_SHA256;
+
+    if (isAdmin) {
+      return json(JSON.stringify({ ok: true, advertisers: list, settings: data.settings || {} }));
+    }
+    /* public: only live ads, no contact details */
+    const live = list.filter(adLive).map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      image: a.image,
+      videoUrl: a.videoUrl,
+      link: a.link,
+      cta: a.cta || 'Visit',
+    }));
+    return json(JSON.stringify({
+      ok: true,
+      ads: live,
+      settings: { upi: (data.settings || {}).upi || '', minTopup: (data.settings || {}).minTopup || 200 },
+    }));
+  }
+
+  /* everything below is admin only */
+  const key = request.headers.get('x-publish-key') || '';
+  const kh = key ? await sha256Hex(key) : '';
+  if (!((env.PUBLISH_KEY && key === env.PUBLISH_KEY) || kh === PUBLISH_KEY_SHA256)) {
+    return json(JSON.stringify({ ok: false, error: 'wrong key' }), 401);
+  }
+
+  let body;
+  try { body = await request.json(); } catch (e) { body = null; }
+  if (!body) return json(JSON.stringify({ ok: false, error: 'bad body' }), 400);
+
+  if (body.action === 'save') {
+    const a = body.advertiser || {};
+    const idx = list.findIndex((x) => x.id === a.id);
+    const record = {
+      id: a.id || 'adv' + Date.now(),
+      name: a.name || 'Advertiser',
+      contact: a.contact || '',
+      type: a.type === 'video' ? 'video' : 'banner',
+      image: a.image || '',
+      videoUrl: a.videoUrl || '',
+      link: a.link || '',
+      cta: a.cta || 'Visit',
+      status: a.status || 'pending',
+      impressionsPurchased: Number(a.impressionsPurchased) || 0,
+      impressionsServed: idx >= 0 ? (list[idx].impressionsServed || 0) : 0,
+      budget: Number(a.budget) || 0,
+      startsAt: a.startsAt || new Date().toISOString(),
+      endsAt: a.endsAt || '',
+      createdAt: idx >= 0 ? list[idx].createdAt : new Date().toISOString(),
+    };
+    if (idx >= 0) list[idx] = record; else list.push(record);
+    data.advertisers = list;
+    await writeAds(env, data);
+    return json(JSON.stringify({ ok: true, advertiser: record }));
+  }
+
+  if (body.action === 'status') {
+    const idx = list.findIndex((x) => x.id === body.id);
+    if (idx < 0) return json(JSON.stringify({ ok: false, error: 'not found' }), 404);
+    list[idx].status = body.status;
+    data.advertisers = list;
+    await writeAds(env, data);
+    return json(JSON.stringify({ ok: true }));
+  }
+
+  if (body.action === 'delete') {
+    data.advertisers = list.filter((x) => x.id !== body.id);
+    await writeAds(env, data);
+    return json(JSON.stringify({ ok: true }));
+  }
+
+  if (body.action === 'settings') {
+    data.settings = Object.assign({}, data.settings || {}, body.settings || {});
+    await writeAds(env, data);
+    return json(JSON.stringify({ ok: true, settings: data.settings }));
+  }
+
+  if (body.action === 'view') {
+    const idx = list.findIndex((x) => x.id === body.id);
+    if (idx >= 0) {
+      list[idx].impressionsServed = (list[idx].impressionsServed || 0) + 1;
+      data.advertisers = list;
+      await writeAds(env, data);
+    }
+    return json(JSON.stringify({ ok: true }));
+  }
+
+  return json(JSON.stringify({ ok: false, error: 'unknown action' }), 400);
+}
+
 /* ---------------- broken link reports ---------------- */
 const REPORTS_PATH = 'reports.json';
 
@@ -730,6 +878,7 @@ export default {
       const body = await res.text();
       return json(JSON.stringify({ ok: res.ok, chat, telegram: body.slice(0, 500) }));
     }
+    if (url.pathname === '/api/ads') return handleAds(request, env, url);
     if (url.pathname === '/api/post/delete') return handlePostDelete(request, env);
     if (url.pathname === '/api/post') return handlePosts(request, env, url);
     if (url.pathname === '/api/report') return handleReport(request, env, url);

@@ -123,6 +123,36 @@ class HomeSection {
       );
 }
 
+class AdItem {
+  final String id;
+  final String name;
+  final String type;      // banner | video
+  final String image;
+  final String videoUrl;
+  final String link;
+  final String cta;
+
+  const AdItem({
+    required this.id,
+    required this.name,
+    this.type = 'banner',
+    this.image = '',
+    this.videoUrl = '',
+    this.link = '',
+    this.cta = 'Visit',
+  });
+
+  factory AdItem.fromJson(Map<String, dynamic> j) => AdItem(
+        id: (j['id'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+        type: (j['type'] ?? 'banner').toString(),
+        image: (j['image'] ?? '').toString(),
+        videoUrl: (j['videoUrl'] ?? '').toString(),
+        link: (j['link'] ?? '').toString(),
+        cta: (j['cta'] ?? 'Visit').toString(),
+      );
+}
+
 class HeroSlide {
   final String id;
   final String type;      // playlist | custom
