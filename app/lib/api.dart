@@ -19,9 +19,23 @@ const String kShareText =
     '💬 Join our Telegram: https://t.me/Anipix_stream';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '2.7.0';
+const String kAppVersion = '3.9.0';
 
 class Api {
+  /// Live (approved) direct-sold ads shown in the app.
+  static Future<List<AdItem>> fetchAds() async {
+    try {
+      final res = await http.get(Uri.parse('$kBaseUrl/api/ads')).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return [];
+      final j = jsonDecode(res.body);
+      final list = (j is Map) ? j['ads'] : null;
+      if (list is! List) return [];
+      return list.whereType<Map>().map((e) => AdItem.fromJson(Map<String, dynamic>.from(e))).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Tells the admin that an episode does not play.
   static Future<bool> sendReport({
     required String playlistId,
