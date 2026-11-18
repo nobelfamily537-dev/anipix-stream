@@ -216,10 +216,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         const SizedBox(height: 10),
         if (_ad != null) _SponsorCard(ad: _ad!),
-        if (layout.heroSlides.isEmpty)
-          _HeroCard(playlist: hero, library: lib)
-        else
-          _HeroSlides(slides: layout.heroSlides, library: lib),
+        Builder(builder: (context) {
+          final slides = layout.heroSlides.isNotEmpty
+              ? layout.heroSlides
+              : lib.playlists
+                  .map((p) => HeroSlide(id: 'p_${p.id}', type: 'playlist', playlistId: p.id))
+                  .toList();
+          if (slides.length > 1) return _HeroSlides(slides: slides, library: lib);
+          return _HeroCard(playlist: hero, library: lib);
+        }),
 
         /* categories */
         const SectionTitle('Categories'),
