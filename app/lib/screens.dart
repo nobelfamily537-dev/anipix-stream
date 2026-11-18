@@ -364,7 +364,7 @@ class _HeroSlides extends StatefulWidget {
 }
 
 class _HeroSlidesState extends State<_HeroSlides> {
-  final _pc = PageController(viewportFraction: 0.94);
+  final _pc = PageController(viewportFraction: 1.0);
   int _page = 0;
 
   @override
@@ -393,7 +393,7 @@ class _HeroSlidesState extends State<_HeroSlides> {
     return Column(
       children: [
         SizedBox(
-          height: 250,
+          height: 320,
           child: PageView.builder(
             controller: _pc,
             itemCount: widget.slides.length,
@@ -406,6 +406,7 @@ class _HeroSlidesState extends State<_HeroSlides> {
                   if (p.id == slide.playlistId) pl = p;
                 }
               }
+              /* custom slide image > playlist banner > playlist poster */
               final image = slide.image.isNotEmpty
                   ? slide.image
                   : (pl == null ? '' : (pl.banner.isNotEmpty ? pl.banner : pl.thumb));
@@ -447,10 +448,10 @@ class _HeroSlidesState extends State<_HeroSlides> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(title,
-                                      maxLines: 1,
+                                      maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                          fontSize: 15, fontWeight: FontWeight.w800)),
+                                          fontSize: 17, fontWeight: FontWeight.w800, height: 1.2)),
                                   if (sub.isNotEmpty)
                                     Text(sub,
                                         maxLines: 1,
@@ -460,8 +461,8 @@ class _HeroSlidesState extends State<_HeroSlides> {
                               ),
                             ),
                             Container(
-                              width: 44,
-                              height: 44,
+                              width: 50,
+                              height: 50,
                               decoration: const BoxDecoration(color: kBrand, shape: BoxShape.circle),
                               child: Icon(
                                 slide.type == 'custom' ? Icons.open_in_new : Icons.play_arrow,
