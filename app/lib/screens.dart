@@ -393,7 +393,7 @@ class _HeroSlidesState extends State<_HeroSlides> {
     return Column(
       children: [
         SizedBox(
-          height: 320,
+          height: 430,
           child: PageView.builder(
             controller: _pc,
             itemCount: widget.slides.length,
@@ -418,11 +418,8 @@ class _HeroSlidesState extends State<_HeroSlides> {
               return GestureDetector(
                 onTap: () => _open(slide),
                 child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    color: kSurface2,
-                  ),
+                  margin: EdgeInsets.zero,
+                  decoration: const BoxDecoration(color: kSurface2),
                   clipBehavior: Clip.antiAlias,
                   child: Stack(
                     fit: StackFit.expand,
@@ -433,7 +430,7 @@ class _HeroSlidesState extends State<_HeroSlides> {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, kBg.withOpacity(0.92)],
+                            colors: [Colors.transparent, kBg.withOpacity(0.35), kBg],
                           ),
                         ),
                       ),
@@ -451,7 +448,7 @@ class _HeroSlidesState extends State<_HeroSlides> {
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                          fontSize: 17, fontWeight: FontWeight.w800, height: 1.2)),
+                                          fontSize: 20, fontWeight: FontWeight.w900, height: 1.2)),
                                   if (sub.isNotEmpty)
                                     Text(sub,
                                         maxLines: 1,
