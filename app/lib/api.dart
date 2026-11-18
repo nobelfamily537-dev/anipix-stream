@@ -19,7 +19,7 @@ const String kShareText =
     '💬 Join our Telegram: https://t.me/Anipix_stream';
 
 /// Shown in the app so you can tell which build is installed.
-const String kAppVersion = '3.9.3';
+const String kAppVersion = '3.9.4';
 
 class Api {
   /// Live (approved) direct-sold ads shown in the app.
