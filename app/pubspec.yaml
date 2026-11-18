@@ -1,7 +1,7 @@
 name: anipix_stream
 description: AniPix Stream — anime streaming app
 publish_to: 'none'
-version: 3.9.0+46
+version: 3.9.1+47
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -17,10 +17,6 @@ dependencies:
   cupertino_icons: ^1.0.6
   url_launcher: ^6.2.5
   file_picker: ^8.0.6
-  qr_flutter: ^4.1.0
-  firebase_core: ^3.6.0
-  firebase_auth: ^5.3.1
-  cloud_firestore: ^5.4.4
 
 flutter:
   uses-material-design: true
