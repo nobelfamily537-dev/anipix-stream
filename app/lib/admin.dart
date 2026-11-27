@@ -857,6 +857,23 @@ class _PlaylistsTabState extends State<_PlaylistsTab> with AutomaticKeepAliveCli
 
 /* -------------------------------------------------------------- episodes */
 
+class _UploadTask {
+  final UploadJob job;
+  final TextEditingController target;
+  final String playlistId;
+  final int season;
+  final int number;
+  final String quality;
+  _UploadTask({
+    required this.job,
+    required this.target,
+    required this.playlistId,
+    required this.season,
+    required this.number,
+    required this.quality,
+  });
+}
+
 class _EpisodesTab extends StatefulWidget {
   final Library lib;
   final Future<void> Function(void Function(Map<String, dynamic>), String) onPublish;
@@ -965,6 +982,11 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
   TextEditingController? _uploadTarget;
   UploadJob? _pendingJob;
 
+  /* every running upload keeps the episode + quality it belongs to, so a link
+     can never land in a different episode */
+  final List<_UploadTask> _tasks = [];
+  final List<String> _readyLinks = [];
+
   Future<void> _uploadTo(TextEditingController target) async {
     if (_accounts.isEmpty) {
       setState(() => _info = 'Add a UFOLOAD account first (Settings tab).');
@@ -980,6 +1002,14 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
       _uploadTarget = target;
       final job = UploadJob(name: path.split('/').last);
       _pendingJob = job;
+      _tasks.add(_UploadTask(
+        job: job,
+        target: target,
+        playlistId: _pid ?? '',
+        season: _season,
+        number: int.tryParse(_epNo.text.trim()) ?? 0,
+        quality: identical(target, _w480) ? '480p' : (identical(target, _w720) ? '720p' : 'link'),
+      ));
       UploadTracker.i.add(job);
       setState(() {
         _uploading = true;
@@ -1118,17 +1148,29 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
     final episodes = _pid == null ? <Episode>[] : widget.lib.episodesOf(_pid!);
     final seasons = <int>{1, for (final e in episodes) e.season};
 
-    final pending = _pendingJob;
-    if (pending != null) {
-      if (pending.status == 'done' && pending.url != null) {
-        final u = pending.url!;
-        final target = _uploadTarget;
-        if (target != null && target.text != u) target.text = u;
-        _uploadTarget = null;
-        _pendingJob = null;
-      } else if (pending.status == 'failed' || pending.status == 'cancelled') {
-        _uploadTarget = null;
-        _pendingJob = null;
+    /* finish any upload whose episode is the one on screen right now */
+    if (_tasks.isNotEmpty) {
+      final curN = int.tryParse(_epNo.text.trim()) ?? 0;
+      for (final t in List<_UploadTask>.from(_tasks)) {
+        if (t.job.status == 'done' && t.job.url != null) {
+          final same = t.playlistId == (_pid ?? '') && t.season == _season && t.number == curN;
+          if (same) {
+            t.target.text = t.job.url!;
+          } else {
+            _readyLinks.add('S${t.season}E${t.number} · ${t.quality} — ${t.job.url}');
+          }
+          _tasks.remove(t);
+          if (identical(_pendingJob, t.job)) {
+            _pendingJob = null;
+            _uploadTarget = null;
+          }
+        } else if (t.job.status == 'failed' || t.job.status == 'cancelled') {
+          _tasks.remove(t);
+          if (identical(_pendingJob, t.job)) {
+            _pendingJob = null;
+            _uploadTarget = null;
+          }
+        }
       }
     }
 
@@ -1286,6 +1328,41 @@ class _EpisodesTabState extends State<_EpisodesTab> with AutomaticKeepAliveClien
             child: Text(_info!, style: const TextStyle(fontSize: 11.5, color: kMuted, height: 1.4)),
           ),
 
+        if (_readyLinks.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: kBrand.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: kBrand.withOpacity(0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Uploaded links (doosre episode ke liye)',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: kBrand)),
+                const SizedBox(height: 4),
+                for (final l in _readyLinks)
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: l.split('—').last.trim()));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 2)),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(l,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10.5, color: kText)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         const Text('Watch links', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
